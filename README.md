@@ -54,7 +54,7 @@ Documentación: `http://localhost:8000/docs`
 - `POST /api/v1/groups/{group_id}/messages`
 - `GET /api/v1/groups/{group_id}/messages`
 - `POST /api/v1/messages/file`
-- `GET /api/v1/users/me/presence`
+- `GET /api/v1/users/{user_id}/presence`
 - `WS /ws/groups/{group_id}?token=<JWT>`
 
 ## Flujo rápido de prueba
