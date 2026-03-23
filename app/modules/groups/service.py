@@ -39,3 +39,10 @@ class GroupsService:
         membership = self.groups_repo.get_member(group_id, user_id)
         if not membership:
             raise PermissionDeniedError('No perteneces a este grupo')
+
+    def get_user_groups(self, user_id) -> list[Group]:
+        return self.groups_repo.get_user_groups(user_id)
+
+    def get_group_members(self, group_id, requester_id):
+        self.ensure_membership(group_id, requester_id)
+        return self.groups_repo.get_group_members_details(group_id)

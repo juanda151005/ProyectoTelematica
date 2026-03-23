@@ -30,3 +30,13 @@ class GroupRepository:
     def list_member_ids(self, group_id):
         stmt = select(GroupMember.user_id).where(GroupMember.group_id == group_id)
         return list(self.db.execute(stmt).scalars().all())
+
+    def get_user_groups(self, user_id):
+        stmt = select(Group).join(GroupMember, Group.id == GroupMember.group_id).where(GroupMember.user_id == user_id)
+        return list(self.db.execute(stmt).scalars().all())
+
+    def get_group_members_details(self, group_id):
+        from app.modules.users.models import User
+        stmt = select(GroupMember.user_id, User.username, GroupMember.role).join(User, GroupMember.user_id == User.id).where(GroupMember.group_id == group_id)
+        rows = self.db.execute(stmt).all()
+        return [{"user_id": r.user_id, "username": r.username, "role": r.role} for r in rows]

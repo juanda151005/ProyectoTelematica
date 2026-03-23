@@ -32,3 +32,4 @@ class MessageOut(BaseModel):
     status: str
     created_at: datetime
     receipts: list[MessageReceiptOut] = Field(default_factory=list)
+    file_url: Optional[str] = None

@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="GroupsApp — Mensajería instantánea en tiempo real">
+  <title>GroupsApp</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+  <!-- ===== AUTH VIEW ===== -->
+  <div id="auth-view">
+    <div class="auth-card">
+      <h1>💬 GroupsApp</h1>
+      <p class="subtitle">Mensajería instantánea en tiempo real</p>
+
+      <div class="auth-tabs">
+        <button class="auth-tab active" data-tab="login">Iniciar Sesión</button>
+        <button class="auth-tab" data-tab="register">Registrarse</button>
+      </div>
+
+      <div id="auth-error" class="auth-error"></div>
+
+      <!-- Login Form -->
+      <form id="login-form">
+        <div class="form-group">
+          <label>Username</label>
+          <input type="text" id="login-username" placeholder="Tu username" required minlength="3" autocomplete="username">
+        </div>
+        <div class="form-group">
+          <label>Contraseña</label>
+          <input type="password" id="login-password" placeholder="Tu contraseña" required minlength="6" autocomplete="current-password">
+        </div>
+        <button type="submit" class="btn-primary">Iniciar Sesión</button>
+      </form>
+
+      <!-- Register Form -->
+      <form id="register-form" class="hidden">
+        <div class="form-group">
+          <label>Username</label>
+          <input type="text" id="register-username" placeholder="Escoge un username" required minlength="3" autocomplete="username">
+        </div>
+        <div class="form-group">
+          <label>Contraseña</label>
+          <input type="password" id="register-password" placeholder="Mínimo 6 caracteres" required minlength="6" autocomplete="new-password">
+        </div>
+        <button type="submit" class="btn-primary">Crear Cuenta</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ===== CHAT VIEW ===== -->
+  <div id="chat-view">
+    <div class="chat-layout">
+
+      <!-- Sidebar -->
+      <aside class="sidebar">
+        <div class="sidebar-header">
+          <h2>💬 GroupsApp</h2>
+        </div>
+
+        <div class="user-info">
+          <div class="user-avatar" id="user-avatar">?</div>
+          <div>
+            <div class="username" id="username-display">Usuario</div>
+            <div class="user-status">● En línea</div>
+          </div>
+          <button class="btn-logout" id="btn-logout">Salir</button>
+        </div>
+
+        <div class="sidebar-actions">
+          <button class="btn-new-group" id="btn-new-group">
+            <span>＋</span> Crear Grupo
+          </button>
+        </div>
+
+        <div class="groups-list" id="groups-list">
+          <div class="empty-state" style="padding: 40px 20px;">
+            <div class="icon">💬</div>
+            <p style="font-size:13px;">No tienes grupos aún. ¡Crea uno!</p>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Main Chat -->
+      <main class="main-chat">
+        <!-- Chat Header -->
+        <div class="chat-header hidden" id="chat-header">
+          <div class="chat-header-info">
+            <div>
+              <h3 id="chat-group-name">Grupo</h3>
+              <div class="member-count" id="chat-member-count">0 miembros</div>
+            </div>
+          </div>
+          <div class="chat-header-actions">
+            <button class="btn-icon" id="btn-members" title="Ver miembros">👥</button>
+          </div>
+        </div>
+
+        <!-- Empty State -->
+        <div class="empty-state" id="empty-chat">
+          <div class="icon">💬</div>
+          <h3>Bienvenido a GroupsApp</h3>
+          <p>Selecciona un grupo del panel izquierdo o crea uno nuevo para comenzar a chatear.</p>
+        </div>
+
+        <!-- Messages -->
+        <div class="messages-container hidden" id="messages-container"></div>
+
+        <!-- Input Area -->
+        <div class="chat-input-area hidden" id="chat-input-area">
+          <div class="chat-input-wrapper">
+            <input type="text" id="message-input" placeholder="Escribe un mensaje..." autocomplete="off">
+            <button class="btn-attach" id="btn-attach" title="Adjuntar archivo">📎</button>
+            <button class="btn-send" id="btn-send" title="Enviar">➤</button>
+          </div>
+          <input type="file" id="file-input" style="display:none">
+        </div>
+      </main>
+
+      <!-- Members Panel -->
+      <aside class="members-panel" id="members-panel">
+        <div class="members-header">
+          <h4>Miembros</h4>
+          <button class="btn-add-member" id="btn-add-member">＋ Agregar</button>
+        </div>
+        <div class="members-list" id="members-list"></div>
+      </aside>
+
+    </div>
+  </div>
+
+  <!-- Modal Overlay -->
+  <div class="modal-overlay" id="modal-overlay"></div>
+
+  <!-- Toast Container -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- Scripts -->
+  <script src="/static/js/api.js"></script>
+  <script src="/static/js/app.js"></script>
+</body>
+</html>

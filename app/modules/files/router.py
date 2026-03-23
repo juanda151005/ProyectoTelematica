@@ -67,6 +67,7 @@ async def upload_file(
                     status=message.status,
                     created_at=message.created_at,
                     receipts=[],
+                    file_url=attachment.url,
                 ).model_dump(mode='json'),
             },
         )

@@ -25,3 +25,8 @@ class GroupMemberOut(BaseModel):
     group_id: UUID
     user_id: UUID
     role: str
+
+class GroupMemberDetailOut(BaseModel):
+    user_id: UUID
+    username: str
+    role: str

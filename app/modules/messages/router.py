@@ -18,6 +18,10 @@ router = APIRouter(prefix='/groups', tags=['messages'])
 
 
 def _to_message_out(message) -> MessageOut:
+    file_url = None
+    if getattr(message, 'attachments', None):
+        file_url = message.attachments[0].url
+
     return MessageOut(
         id=message.id,
         sender_id=message.sender_id,
@@ -31,6 +35,7 @@ def _to_message_out(message) -> MessageOut:
             MessageReceiptOut(user_id=r.user_id, delivered_at=r.delivered_at, read_at=r.read_at)
             for r in message.receipts
         ],
+        file_url=file_url,
     )
 
 
