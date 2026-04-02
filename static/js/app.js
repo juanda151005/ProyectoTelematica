@@ -470,6 +470,38 @@
             }
           });
           if (changed) renderMessages();
+        } else if (data.event === 'member_added') {
+          if (!state.members.find(m => m.user_id === data.data.user_id)) {
+            state.members.push(data.data);
+            if (state.membersPanelOpen) renderMembers();
+          }
+        } else if (data.event === 'member_removed') {
+          const removedUserId = data.data.user_id;
+          if (removedUserId === state.currentUserId) {
+            showToast('Has sido eliminado del grupo', 'warning');
+            state.activeGroupId = null;
+            emptyChat.style.display = 'flex';
+            chatHeader.classList.add('hidden');
+            messagesContainer.classList.add('hidden');
+            chatInputArea.classList.add('hidden');
+            membersPanel.classList.remove('open');
+            state.membersPanelOpen = false;
+            loadGroups();
+          } else {
+            state.members = state.members.filter(m => m.user_id !== removedUserId);
+            if (state.membersPanelOpen) renderMembers();
+          }
+        } else if (data.event === 'member_updated') {
+          const updatedUserId = data.data.user_id;
+          const updatedRole = data.data.role;
+          const member = state.members.find(m => m.user_id === updatedUserId);
+          if (member) {
+            member.role = updatedRole;
+            if (state.membersPanelOpen) renderMembers();
+          }
+          if (updatedUserId === state.currentUserId) {
+            showToast(`Tu rol ha sido actualizado a ${updatedRole}`, 'info');
+          }
         }
       },
       () => {
@@ -495,6 +527,11 @@
   function renderMembers() {
     membersList.innerHTML = '';
     
+    const activeGroup = state.groups.find(g => g.id === state.activeGroupId);
+    const creatorId = activeGroup ? activeGroup.admin_id : null;
+    const myMembership = state.members.find(m => m.user_id === state.currentUserId);
+    const amIAdmin = myMembership && myMembership.role === 'admin';
+
     // Sort so admin defaults to top
     const sortedMembers = [...state.members].sort((a, b) => {
       if (a.role === 'admin' && b.role !== 'admin') return -1;
@@ -505,6 +542,26 @@
     chatMemberCount.textContent = `${sortedMembers.length} miembro${sortedMembers.length !== 1 ? 's' : ''}`;
 
     sortedMembers.forEach(member => {
+      const isCreator = member.user_id === creatorId;
+      const isAdmin = member.role === 'admin';
+
+      let optionsHtml = '';
+      if (amIAdmin && member.user_id !== state.currentUserId && !isCreator) {
+        optionsHtml = `
+          <div class="member-options" onclick="toggleMemberOptions('${member.user_id}', event)">
+            ⋮
+            <div class="options-dropdown" id="dropdown-${member.user_id}">
+              <div onclick="changeMemberRole('${member.user_id}', '${isAdmin ? 'member' : 'admin'}', event)">
+                ${isAdmin ? 'Quitar Admin' : 'Hacer Admin'}
+              </div>
+              <div class="option-danger" onclick="expelMember('${member.user_id}', event)">
+                Eliminar del grupo
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
       const el = document.createElement('div');
       el.className = 'member-item';
       el.innerHTML = `
@@ -516,14 +573,56 @@
           <div class="member-name">${escapeHtml(member.username)}</div>
           <div class="member-role ${member.role}">${member.role === 'admin' ? '👑 Admin' : 'Miembro'}</div>
         </div>
+        ${optionsHtml}
       `;
-      el.onclick = () => checkPresence(member.user_id);
+      // Don't toggle options if clicking on empty space
+      el.onclick = (e) => {
+        if (!e.target.closest('.member-options')) {
+          checkPresence(member.user_id);
+        }
+      };
       membersList.appendChild(el);
 
       // Fetch presence
       fetchPresence(member.user_id);
     });
   }
+
+  // ===== Member Options UI =====
+  window.toggleMemberOptions = function(userId, event) {
+    event.stopPropagation();
+    document.querySelectorAll('.options-dropdown').forEach(el => {
+      if(el.id !== `dropdown-${userId}`) el.classList.remove('show');
+    });
+    const dropdown = document.getElementById(`dropdown-${userId}`);
+    if (dropdown) dropdown.classList.toggle('show');
+  };
+
+  document.addEventListener('click', () => {
+    document.querySelectorAll('.options-dropdown.show').forEach(el => el.classList.remove('show'));
+  });
+
+  window.changeMemberRole = async function(userId, newRole, event) {
+    event.stopPropagation();
+    document.querySelectorAll('.options-dropdown.show').forEach(el => el.classList.remove('show'));
+    try {
+      if(newRole === 'admin' && !confirm('¿Estás seguro de hacer a este usuario Administrador?')) return;
+      await api.updateMemberRole(state.activeGroupId, userId, newRole);
+    } catch (err) {
+      showToast(`Error: ${err.message}`, 'error');
+    }
+  };
+
+  window.expelMember = async function(userId, event) {
+    event.stopPropagation();
+    document.querySelectorAll('.options-dropdown.show').forEach(el => el.classList.remove('show'));
+    if (!confirm('¿Estás seguro de que deseas eliminar a este integrante del grupo?')) return;
+    try {
+      await api.removeMember(state.activeGroupId, userId);
+    } catch (err) {
+      showToast(`Error: ${err.message}`, 'error');
+    }
+  };
 
   async function fetchPresence(userId) {
     try {

@@ -809,6 +809,76 @@ input, textarea {
   color: var(--text-accent);
 }
 
+.member-item {
+  position: relative;
+}
+
+.member-options {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s;
+  color: var(--text-muted);
+}
+
+.member-item:hover .member-options {
+  opacity: 1;
+}
+
+.member-options:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.options-dropdown {
+  position: absolute;
+  right: 0;
+  top: 30px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  width: 140px;
+  z-index: 50;
+  display: none;
+  flex-direction: column;
+  padding: 4px;
+}
+
+.options-dropdown.show {
+  display: flex;
+}
+
+.options-dropdown div {
+  padding: 8px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.options-dropdown div:hover {
+  background: var(--surface-hover);
+}
+
+.option-danger {
+  color: #ef4444;
+}
+.option-danger:hover {
+  background: rgba(239, 68, 68, 0.1) !important;
+}
+
 /* ===== Modal ===== */
 .modal-overlay {
   position: fixed;

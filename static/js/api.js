@@ -80,6 +80,14 @@ class ApiClient {
     return this.request('POST', `/groups/${groupId}/members`, { username });
   }
 
+  async removeMember(groupId, userId) {
+    return this.request('DELETE', `/groups/${groupId}/members/${userId}`);
+  }
+
+  async updateMemberRole(groupId, userId, role) {
+    return this.request('PUT', `/groups/${groupId}/members/${userId}/role`, { role });
+  }
+
   // ===== Messages =====
   async sendMessage(groupId, content, recipientId = null) {
     return this.request('POST', `/groups/${groupId}/messages`, {

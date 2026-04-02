@@ -17,12 +17,16 @@ class GroupsService:
         self.groups_repo.create_member(admin_membership)
         return group
 
+    def _ensure_admin(self, group, requester_id):
+        membership = self.groups_repo.get_member(group.id, requester_id)
+        if not membership or membership.role != GroupMemberRole.ADMIN.value:
+            raise PermissionDeniedError('Solo los administradores pueden realizar esta acción')
+
     def add_member(self, group_id, requester_id, username: str) -> GroupMember:
         group = self.groups_repo.get_group(group_id)
         if not group:
             raise NotFoundError('Grupo no encontrado')
-        if group.admin_id != requester_id:
-            raise PermissionDeniedError('Solo el admin puede agregar miembros')
+        self._ensure_admin(group, requester_id)
 
         user = self.users_repo.get_by_username(username)
         if not user:
@@ -34,6 +38,41 @@ class GroupsService:
 
         membership = GroupMember(group_id=group_id, user_id=user.id, role=GroupMemberRole.MEMBER.value)
         return self.groups_repo.create_member(membership)
+
+    def remove_member(self, group_id, requester_id, target_user_id) -> None:
+        group = self.groups_repo.get_group(group_id)
+        if not group:
+            raise NotFoundError('Grupo no encontrado')
+        self._ensure_admin(group, requester_id)
+
+        if group.admin_id == target_user_id:
+            raise PermissionDeniedError('El creador del grupo no puede ser eliminado')
+
+        target_membership = self.groups_repo.get_member(group_id, target_user_id)
+        if not target_membership:
+            raise NotFoundError('El usuario no pertenece al grupo')
+
+        self.groups_repo.delete_member(target_membership)
+
+    def update_member_role(self, group_id, requester_id, target_user_id, new_role: str) -> GroupMember:
+        group = self.groups_repo.get_group(group_id)
+        if not group:
+            raise NotFoundError('Grupo no encontrado')
+        self._ensure_admin(group, requester_id)
+
+        if group.admin_id == target_user_id:
+            raise PermissionDeniedError('El creador del grupo no puede ser modificado')
+
+        target_membership = self.groups_repo.get_member(group_id, target_user_id)
+        if not target_membership:
+            raise NotFoundError('El usuario no pertenece al grupo')
+
+        if new_role not in [GroupMemberRole.ADMIN.value, GroupMemberRole.MEMBER.value]:
+            raise ConflictError('Rol inválido')
+
+        target_membership.role = new_role
+        self.groups_repo.save()
+        return target_membership
 
     def ensure_membership(self, group_id, user_id) -> None:
         membership = self.groups_repo.get_member(group_id, user_id)

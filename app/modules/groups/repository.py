@@ -40,3 +40,10 @@ class GroupRepository:
         stmt = select(GroupMember.user_id, User.username, GroupMember.role).join(User, GroupMember.user_id == User.id).where(GroupMember.group_id == group_id)
         rows = self.db.execute(stmt).all()
         return [{"user_id": r.user_id, "username": r.username, "role": r.role} for r in rows]
+
+    def delete_member(self, member: GroupMember) -> None:
+        self.db.delete(member)
+        self.db.commit()
+
+    def save(self) -> None:
+        self.db.commit()
