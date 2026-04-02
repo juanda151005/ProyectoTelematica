@@ -6,7 +6,9 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user
 from app.core.database import get_db
 from app.modules.groups.repository import GroupRepository
-from app.modules.groups.schemas import AddMemberRequest, GroupCreateRequest, GroupMemberOut, GroupOut, GroupMemberDetailOut, UpdateRoleRequest
+from app.modules.groups.schemas import AddMemberRequest, GroupCreateRequest, GroupMemberOut, GroupOut, GroupMemberDetailOut, UpdateRoleRequest, CreateDMRequest
+
+
 from app.modules.groups.service import GroupsService
 from app.modules.messages.websocket import ws_manager
 from app.modules.users.models import User
@@ -14,6 +16,26 @@ from app.modules.users.repository import UserRepository
 from app.shared.exceptions import ConflictError, NotFoundError, PermissionDeniedError
 
 router = APIRouter(prefix='/groups', tags=['groups'])
+
+@router.post('/dm', response_model=GroupOut, status_code=status.HTTP_201_CREATED)
+def create_dm(
+    payload: CreateDMRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    service = GroupsService(GroupRepository(db), UserRepository(db))
+    try:
+        group = service.get_or_create_dm(current_user.id, payload.user_id)
+        # Rename the group specifically for the requester's response
+        user_repo = UserRepository(db)
+        target_user = user_repo.get_by_id(payload.user_id)
+        if target_user:
+            group.name = target_user.username
+        return group
+    except NotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
 @router.post('', response_model=GroupOut, status_code=status.HTTP_201_CREATED)
 def create_group(

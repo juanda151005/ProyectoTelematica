@@ -45,5 +45,24 @@ class GroupRepository:
         self.db.delete(member)
         self.db.commit()
 
+    def find_dm_group(self, user1_id, user2_id):
+        stmt = (
+            select(Group)
+            .join(GroupMember, Group.id == GroupMember.group_id)
+            .where(GroupMember.user_id == user1_id)
+        )
+        user1_groups = self.db.execute(stmt).scalars().all()
+        for g in user1_groups:
+            if g.settings.get('is_dm') is True:
+                # Check if user2 is a member
+                if self.get_member(g.id, user2_id):
+                    return g
+        return None
+
+    def has_messages(self, group_id) -> bool:
+        from app.modules.messages.models import Message
+        stmt = select(Message.id).where(Message.group_id == group_id).limit(1)
+        return self.db.execute(stmt).scalar_one_or_none() is not None
+
     def save(self) -> None:
         self.db.commit()

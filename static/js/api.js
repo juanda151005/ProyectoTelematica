@@ -80,6 +80,10 @@ class ApiClient {
     return this.request('POST', `/groups/${groupId}/members`, { username });
   }
 
+  async startDM(userId) {
+    return this.request('POST', `/groups/dm`, { user_id: userId });
+  }
+
   async removeMember(groupId, userId) {
     return this.request('DELETE', `/groups/${groupId}/members/${userId}`);
   }

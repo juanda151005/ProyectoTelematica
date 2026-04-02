@@ -33,3 +33,6 @@ class GroupMemberDetailOut(BaseModel):
 
 class UpdateRoleRequest(BaseModel):
     role: str
+
+class CreateDMRequest(BaseModel):
+    user_id: UUID

@@ -47,6 +47,7 @@
   const btnAttach = $('#btn-attach');
   const fileInput = $('#file-input');
   const btnMembers = $('#btn-members');
+  const btnLeave = $('#btn-leave');
 
   // Members panel
   const membersPanel = $('#members-panel');
@@ -544,19 +545,28 @@
     sortedMembers.forEach(member => {
       const isCreator = member.user_id === creatorId;
       const isAdmin = member.role === 'admin';
+      const isDM = activeGroup && activeGroup.settings && activeGroup.settings.is_dm;
 
       let optionsHtml = '';
-      if (amIAdmin && member.user_id !== state.currentUserId && !isCreator) {
+      if (member.user_id !== state.currentUserId) {
+        let itemsHtml = '';
+        if (amIAdmin && !isCreator && !isDM) {
+          itemsHtml += `
+            <div onclick="changeMemberRole('${member.user_id}', '${isAdmin ? 'member' : 'admin'}', event)">
+              ${isAdmin ? 'Quitar Admin' : 'Hacer Admin'}
+            </div>
+            <div class="option-danger" onclick="expelMember('${member.user_id}', event)">
+              Eliminar del grupo
+            </div>
+          `;
+        }
+        itemsHtml += `<div onclick="startDMChat('${member.user_id}', event)">Ir a chat privado</div>`;
+
         optionsHtml = `
           <div class="member-options" onclick="toggleMemberOptions('${member.user_id}', event)">
             ⋮
             <div class="options-dropdown" id="dropdown-${member.user_id}">
-              <div onclick="changeMemberRole('${member.user_id}', '${isAdmin ? 'member' : 'admin'}', event)">
-                ${isAdmin ? 'Quitar Admin' : 'Hacer Admin'}
-              </div>
-              <div class="option-danger" onclick="expelMember('${member.user_id}', event)">
-                Eliminar del grupo
-              </div>
+              ${itemsHtml}
             </div>
           </div>
         `;
@@ -571,7 +581,7 @@
         </div>
         <div>
           <div class="member-name">${escapeHtml(member.username)}</div>
-          <div class="member-role ${member.role}">${member.role === 'admin' ? '👑 Admin' : 'Miembro'}</div>
+          <div class="member-role ${member.role}">${member.role === 'admin' && !isDM ? '👑 Admin' : 'Miembro'}</div>
         </div>
         ${optionsHtml}
       `;
@@ -619,6 +629,21 @@
     if (!confirm('¿Estás seguro de que deseas eliminar a este integrante del grupo?')) return;
     try {
       await api.removeMember(state.activeGroupId, userId);
+    } catch (err) {
+      showToast(`Error: ${err.message}`, 'error');
+    }
+  };
+
+  window.startDMChat = async function(userId, event) {
+    if (event) event.stopPropagation();
+    document.querySelectorAll('.options-dropdown.show').forEach(el => el.classList.remove('show'));
+    try {
+      const dmGroup = await api.startDM(userId);
+      if (!state.groups.find(g => g.id === dmGroup.id)) {
+        state.groups.unshift(dmGroup); 
+      }
+      selectGroup(dmGroup);
+      if (state.membersPanelOpen) toggleMembersPanel();
     } catch (err) {
       showToast(`Error: ${err.message}`, 'error');
     }
@@ -761,6 +786,19 @@
 
     // Add member
     $('#btn-add-member').onclick = addMember;
+
+    // Leave chat
+    if (btnLeave) {
+      btnLeave.onclick = async () => {
+        if (!state.activeGroupId) return;
+        if (!confirm('¿Estás seguro de que deseas abandonar este chat?')) return;
+        try {
+          await api.removeMember(state.activeGroupId, state.currentUserId);
+        } catch (err) {
+          showToast(`Error: ${err.message}`, 'error');
+        }
+      };
+    }
   }
 
   // ===== Init =====
