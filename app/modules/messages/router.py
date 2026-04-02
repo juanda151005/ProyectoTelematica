@@ -63,7 +63,7 @@ async def send_message(
 
 
 @router.get('/{group_id}/messages', response_model=list[MessageOut])
-def get_messages(
+async def get_messages(
     group_id: UUID,
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
@@ -73,13 +73,24 @@ def get_messages(
 ):
     service = MessagesService(MessageRepository(db), GroupRepository(db))
     try:
-        messages = service.get_history(
+        messages, updated_ids = service.get_history(
             user_id=current_user.id,
             group_id=group_id,
             limit=limit,
             offset=offset,
             mark_read=mark_read,
         )
-        return [_to_message_out(message) for message in messages]
+        out_messages = [_to_message_out(message) for message in messages]
+        
+        if updated_ids:
+            updated_out = [msg for msg in out_messages if msg.id in updated_ids]
+            await ws_manager.broadcast(group_id, {
+                'event': 'receipts_updated',
+                'data': {
+                    'messages': [msg.model_dump(mode='json') for msg in updated_out]
+                }
+            })
+            
+        return out_messages
     except PermissionDeniedError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc

@@ -62,21 +62,24 @@ class MessagesService:
         message_ids = [msg.id for msg in messages]
 
         if not message_ids:
-            return messages
+            return messages, []
 
         receipts = self.messages_repo.list_receipts_for_user(user_id, message_ids)
         now = self.messages_repo.utcnow()
         changed = False
+        updated_message_ids = set()
 
         for receipt in receipts:
             if receipt.delivered_at is None:
                 receipt.delivered_at = now
+                updated_message_ids.add(receipt.message_id)
                 changed = True
             if mark_read and receipt.read_at is None:
                 receipt.read_at = now
+                updated_message_ids.add(receipt.message_id)
                 changed = True
 
         if changed:
             self.messages_repo.save()
 
-        return self.messages_repo.list_group_messages(group_id, limit=limit, offset=offset)
+        return self.messages_repo.list_group_messages(group_id, limit=limit, offset=offset), list(updated_message_ids)

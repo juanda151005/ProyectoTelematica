@@ -368,12 +368,37 @@
         `;
       }
 
+      let receiptHtml = '';
+      if (isOwn) {
+        const othersReceipts = (msg.receipts || []).filter(r => r.user_id !== msg.sender_id);
+        const totalOthers = othersReceipts.length;
+        if (totalOthers === 0) {
+          receiptHtml = `<span class="receipt-dot receipt-blue" title="Leído"></span>`;
+        } else {
+          const deliveredCount = othersReceipts.filter(r => r.delivered_at).length;
+          const readCount = othersReceipts.filter(r => r.read_at).length;
+          
+          let receiptClass = 'receipt-black';
+          if (readCount === totalOthers) {
+            receiptClass = 'receipt-blue';
+          } else if (deliveredCount === totalOthers) {
+            receiptClass = 'receipt-gray';
+          }
+          receiptHtml = `<span class="receipt-dot ${receiptClass}" title="Ver información del mensaje"></span>`;
+        }
+      }
+
       el.innerHTML = `
         <div class="message-bubble">
           ${contentHtml}
-          <div class="message-time">${time}</div>
+          <div class="message-time">${time}${receiptHtml}</div>
         </div>
       `;
+
+      if (isOwn) {
+        const dot = el.querySelector('.receipt-dot');
+        if (dot) dot.onclick = () => showReceiptsModal(msg);
+      }
 
       messagesContainer.appendChild(el);
     });
@@ -434,6 +459,17 @@
             state.messages.push(msg);
             renderMessages();
           }
+        } else if (data.event === 'receipts_updated') {
+          const updatedMsgs = data.data.messages || [];
+          let changed = false;
+          updatedMsgs.forEach(updatedMsg => {
+            const index = state.messages.findIndex(m => m.id === updatedMsg.id);
+            if (index !== -1) {
+              state.messages[index] = updatedMsg;
+              changed = true;
+            }
+          });
+          if (changed) renderMessages();
         }
       },
       () => {
@@ -537,6 +573,63 @@
     const div = document.createElement('div');
     div.textContent = str;
     return div.innerHTML;
+  }
+
+  // ===== Receipts Modal =====
+  function showReceiptsModal(msg) {
+    const othersReceipts = (msg.receipts || []).filter(r => r.user_id !== msg.sender_id);
+    if (othersReceipts.length === 0) {
+      showToast("No hay otros miembros en el grupo", "info");
+      return;
+    }
+    
+    // Sort logic
+    const sorted = [...othersReceipts].sort((a, b) => {
+      if (a.read_at && !b.read_at) return -1;
+      if (!a.read_at && b.read_at) return 1;
+      if (a.delivered_at && !b.delivered_at) return -1;
+      if (!a.delivered_at && b.delivered_at) return 1;
+      return 0;
+    });
+
+    const receiptsHtml = sorted.map(r => {
+      const username = getSenderName(r.user_id);
+      let statusHtml = '';
+      if (r.read_at) {
+        const time = new Date(r.read_at).toLocaleString('es-CO', {day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'});
+        statusHtml = `<span class="receipt-tag tag-read">Visto: ${time}</span>`;
+      } else if (r.delivered_at) {
+        const time = new Date(r.delivered_at).toLocaleString('es-CO', {day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'});
+        statusHtml = `<span class="receipt-tag tag-delivered">Entregado: ${time}</span>`;
+      } else {
+        statusHtml = `<span class="receipt-tag tag-pending">Pendiente</span>`;
+      }
+      return `
+        <div class="receipt-user">
+          <div>${escapeHtml(username)}</div>
+          <div class="receipt-status">${statusHtml}</div>
+        </div>
+      `;
+    }).join('');
+
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.innerHTML = `
+      <h3>Información del mensaje</h3>
+      <div class="receipts-list">
+        ${receiptsHtml}
+      </div>
+      <div class="modal-actions">
+        <button class="btn-modal-primary" id="modal-close">Cerrar</button>
+      </div>
+    `;
+
+    modalOverlay.innerHTML = '';
+    modalOverlay.appendChild(modal);
+    modalOverlay.classList.add('open');
+
+    modal.querySelector('#modal-close').onclick = closeModal;
+    modalOverlay.onclick = (e) => { if (e.target === modalOverlay) closeModal(); };
   }
 
   // ===== Event Listeners =====
