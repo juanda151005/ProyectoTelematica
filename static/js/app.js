@@ -329,7 +329,8 @@
     let lastDate = '';
 
     state.messages.forEach(msg => {
-      const msgDate = new Date(msg.created_at).toLocaleDateString('es-CO');
+      const msgDateObj = parseUTCDate(msg.created_at);
+      const msgDate = msgDateObj.toLocaleDateString('es-CO');
       if (msgDate !== lastDate) {
         lastDate = msgDate;
         const divider = document.createElement('div');
@@ -343,7 +344,7 @@
       el.className = `message ${isOwn ? 'own' : 'other'}`;
 
       const senderName = isOwn ? 'Tú' : getSenderName(msg.sender_id);
-      const time = new Date(msg.created_at).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
+      const time = parseUTCDate(msg.created_at).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
 
       let contentHtml = '';
       if (msg.message_type === 'image') {
@@ -666,7 +667,7 @@
       const presence = await api.getPresence(userId);
       const status = presence.is_online ? '🟢 En línea' : '⚫ Desconectado';
       const lastSeen = presence.last_seen
-        ? `Última vez: ${new Date(presence.last_seen).toLocaleString('es-CO')}`
+        ? `Última vez: ${parseUTCDate(presence.last_seen).toLocaleString('es-CO')}`
         : '';
       showToast(`${status} ${lastSeen}`, 'info');
     } catch (err) {
@@ -692,6 +693,18 @@
   }
 
   // ===== Utilities =====
+  function parseUTCDate(dateStr) {
+    if (!dateStr) return null;
+    let str = String(dateStr);
+    // Replace space with T just in case
+    str = str.replace(' ', 'T');
+    // If it doesn't have Z or timezone offset, force append Z to make it UTC
+    if (!str.endsWith('Z') && !str.includes('+') && (str.split('-').length <= 3)) {
+      str += 'Z';
+    }
+    return new Date(str);
+  }
+
   function escapeHtml(str) {
     if (!str) return '';
     const div = document.createElement('div');
@@ -720,10 +733,10 @@
       const username = getSenderName(r.user_id);
       let statusHtml = '';
       if (r.read_at) {
-        const time = new Date(r.read_at).toLocaleString('es-CO', {day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'});
+        const time = parseUTCDate(r.read_at).toLocaleString('es-CO', {day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'});
         statusHtml = `<span class="receipt-tag tag-read">Visto: ${time}</span>`;
       } else if (r.delivered_at) {
-        const time = new Date(r.delivered_at).toLocaleString('es-CO', {day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'});
+        const time = parseUTCDate(r.delivered_at).toLocaleString('es-CO', {day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'});
         statusHtml = `<span class="receipt-tag tag-delivered">Entregado: ${time}</span>`;
       } else {
         statusHtml = `<span class="receipt-tag tag-pending">Pendiente</span>`;
