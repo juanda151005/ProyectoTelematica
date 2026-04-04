@@ -16,7 +16,7 @@ from app.modules.groups.repository import GroupRepository
 from app.modules.messages.repository import MessageRepository
 from app.modules.messages.schemas import MessageOut
 from app.modules.messages.service import MessagesService
-from app.modules.messages.websocket import ws_manager
+from app.modules.messages.websocket import ws_manager, user_notify_manager
 from app.modules.users.models import User
 from app.shared.enums import MessageType
 from app.shared.exceptions import PermissionDeniedError
@@ -53,24 +53,37 @@ async def upload_file(
             content_type=file.content_type or 'application/octet-stream',
         )
 
-        await ws_manager.broadcast(
-            group_id,
-            {
-                'event': 'new_file',
-                'data': MessageOut(
-                    id=message.id,
-                    sender_id=message.sender_id,
-                    group_id=message.group_id,
-                    recipient_id=message.recipient_id,
-                    content=message.content,
-                    message_type=message.message_type,
-                    status=message.status,
-                    created_at=message.created_at,
-                    receipts=[],
-                    file_url=attachment.url,
-                ).model_dump(mode='json'),
-            },
+        msg_out = MessageOut(
+            id=message.id,
+            sender_id=message.sender_id,
+            group_id=message.group_id,
+            recipient_id=message.recipient_id,
+            content=message.content,
+            message_type=message.message_type,
+            status=message.status,
+            created_at=message.created_at,
+            receipts=[],
+            file_url=attachment.url,
         )
+        msg_json = msg_out.model_dump(mode='json')
+
+        # Broadcast to group WebSocket (existing behavior)
+        await ws_manager.broadcast(group_id, {'event': 'new_file', 'data': msg_json})
+
+        # Notify all group members via user notification WebSocket
+        groups_repo = GroupRepository(db)
+        member_ids = groups_repo.list_member_ids(group_id)
+        sender_name = current_user.username if hasattr(current_user, 'username') else str(current_user.id)[:8]
+        await user_notify_manager.notify_users(member_ids, {
+            'event': 'new_message_notification',
+            'data': {
+                'group_id': str(group_id),
+                'sender_id': str(current_user.id),
+                'sender_name': sender_name,
+                'content_preview': '📎 ' + (file.filename or 'Archivo'),
+                'message': msg_json,
+            }
+        })
 
         return FileUploadResponse(message_id=message.id, file_id=attachment.id, file_url=attachment.url or '')
     except PermissionDeniedError as exc:

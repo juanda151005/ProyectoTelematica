@@ -412,6 +412,40 @@ input, textarea {
   max-width: 180px;
 }
 
+.group-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Unread badge — WhatsApp style */
+.unread-badge {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: var(--radius-full);
+  background: #ef4444;
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.4);
+  animation: badgePulse 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes badgePulse {
+  0% { transform: scale(0); opacity: 0; }
+  60% { transform: scale(1.2); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.group-name.has-unread {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
 /* --- Main Chat Area --- */
 .main-chat {
   flex: 1;

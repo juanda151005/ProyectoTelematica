@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.modules.messages.models import Message, MessageReceipt
@@ -42,6 +42,20 @@ class MessageRepository:
     def list_receipts_for_user(self, user_id, message_ids: list):
         stmt = select(MessageReceipt).where(MessageReceipt.user_id == user_id, MessageReceipt.message_id.in_(message_ids))
         return list(self.db.execute(stmt).scalars().all())
+
+    def count_unread_per_group(self, user_id) -> dict:
+        """Returns {group_id: unread_count} for all groups the user has unread messages in."""
+        stmt = (
+            select(Message.group_id, func.count(MessageReceipt.id))
+            .join(MessageReceipt, MessageReceipt.message_id == Message.id)
+            .where(
+                MessageReceipt.user_id == user_id,
+                MessageReceipt.read_at.is_(None),
+            )
+            .group_by(Message.group_id)
+        )
+        rows = self.db.execute(stmt).all()
+        return {row[0]: row[1] for row in rows}
 
     def save(self) -> None:
         self.db.commit()

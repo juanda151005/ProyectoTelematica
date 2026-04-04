@@ -12,8 +12,10 @@
     messages: [],
     members: [],          // [{user_id, role, username}]
     ws: null,
+    notificationWs: null, // User-level notification WebSocket
     membersPanelOpen: false,
     usernameCache: {},    // userId -> username (populated from messages & members)
+    unreadCounts: {},     // groupId -> unread message count
   };
 
   // ===== DOM refs =====
@@ -188,11 +190,14 @@
     userAvatar.textContent = (state.currentUsername || '?')[0].toUpperCase();
     usernameDisplay.textContent = state.currentUsername || 'Usuario';
     loadGroups();
+    loadUnreadCounts();
+    connectNotificationWS();
   }
 
   // ===== Logout =====
   function logout() {
     if (state.ws) { state.ws.close(); state.ws = null; }
+    if (state.notificationWs) { state.notificationWs.close(); state.notificationWs = null; }
     api.logout();
     state.currentUserId = null;
     state.currentUsername = null;
@@ -201,6 +206,7 @@
     state.messages = [];
     state.members = [];
     state.usernameCache = {};
+    state.unreadCounts = {};
     chatView.style.display = 'none';
     authView.style.display = 'flex';
     // Clear forms
@@ -241,12 +247,15 @@
     state.groups.forEach(group => {
       const el = document.createElement('div');
       el.className = `group-item${group.id === state.activeGroupId ? ' active' : ''}`;
+      const unread = state.unreadCounts[group.id] || 0;
+      const hasUnread = unread > 0 && group.id !== state.activeGroupId;
       el.innerHTML = `
         <div class="group-avatar">${group.name[0].toUpperCase()}</div>
-        <div>
-          <div class="group-name">${escapeHtml(group.name)}</div>
+        <div class="group-item-info">
+          <div class="group-name${hasUnread ? ' has-unread' : ''}">${escapeHtml(group.name)}</div>
           <div class="group-preview">${group.id === state.activeGroupId ? 'Activo' : ''}</div>
         </div>
+        ${hasUnread ? `<div class="unread-badge">${unread > 99 ? '99+' : unread}</div>` : ''}
       `;
       el.onclick = () => selectGroup(group);
       groupsList.appendChild(el);
@@ -277,6 +286,9 @@
     state.messages = [];
     state.members = [];
 
+    // Clear unread count for this group
+    state.unreadCounts[group.id] = 0;
+
     // Update UI
     renderGroups();
     chatGroupName.textContent = group.name;
@@ -286,7 +298,7 @@
     messagesContainer.classList.remove('hidden');
     messagesContainer.innerHTML = '';
 
-    // Load messages
+    // Load messages (mark_read=true marks them as read on the server)
     try {
       const messages = await api.getMessages(group.id, 100);
       state.messages = messages;
@@ -515,6 +527,80 @@
         }, 3000);
       }
     );
+  }
+
+  // ===== Notification WebSocket (user-level, cross-group) =====
+  function connectNotificationWS() {
+    if (state.notificationWs) { state.notificationWs.close(); state.notificationWs = null; }
+
+    state.notificationWs = api.connectNotificationWS(
+      (data) => {
+        if (data.event === 'new_message_notification') {
+          const notif = data.data;
+          const groupId = notif.group_id;
+          const senderId = notif.sender_id;
+
+          // Skip notifications from ourselves
+          if (senderId === state.currentUserId) return;
+
+          // Check if this group is in our sidebar
+          const knownGroup = state.groups.find(g => g.id === groupId);
+
+          if (!knownGroup) {
+            // Unknown group (e.g. first DM message or just added) — reload groups
+            loadGroups();
+            // Also set unread count for this new group
+            state.unreadCounts[groupId] = (state.unreadCounts[groupId] || 0) + 1;
+            return;
+          }
+
+          if (groupId === state.activeGroupId) {
+            // Active group: message arrives via group WS, no badge needed
+            // But ensure it's appended if the group WS hasn't delivered it yet
+            const msg = notif.message;
+            if (msg && !state.messages.find(m => m.id === msg.id)) {
+              state.messages.push(msg);
+              renderMessages();
+            }
+          } else {
+            // Different group: increment unread badge
+            state.unreadCounts[groupId] = (state.unreadCounts[groupId] || 0) + 1;
+            renderGroups();
+          }
+
+        } else if (data.event === 'added_to_group') {
+          // A group was added (someone added us, or a DM was created)
+          const groupData = data.data;
+          if (!state.groups.find(g => g.id === groupData.id)) {
+            state.groups.unshift(groupData);
+            renderGroups();
+            showToast(`Te agregaron al grupo "${groupData.name}"`, 'info');
+          }
+        }
+      },
+      () => {
+        // On close — try reconnect after 3s
+        setTimeout(() => {
+          if (api.isAuthenticated()) {
+            connectNotificationWS();
+          }
+        }, 3000);
+      }
+    );
+  }
+
+  // ===== Unread Counts =====
+  async function loadUnreadCounts() {
+    try {
+      const counts = await api.getUnreadCounts();
+      state.unreadCounts = {};
+      counts.forEach(item => {
+        state.unreadCounts[item.group_id] = item.count;
+      });
+      renderGroups();
+    } catch (err) {
+      console.warn('Error loading unread counts:', err.message);
+    }
   }
 
   // ===== Members =====

@@ -145,6 +145,37 @@ class ApiClient {
     return ws;
   }
 
+  // ===== User Notification WebSocket =====
+  connectNotificationWS(onMessage, onClose) {
+    const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const url = `${protocol}//${location.host}/ws/notifications?token=${this.token}`;
+    const ws = new WebSocket(url);
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        onMessage(data);
+      } catch (e) {
+        console.error('Notification WS parse error:', e);
+      }
+    };
+
+    ws.onclose = () => {
+      if (onClose) onClose();
+    };
+
+    ws.onerror = (err) => {
+      console.error('Notification WS error:', err);
+    };
+
+    return ws;
+  }
+
+  // ===== Unread Counts =====
+  async getUnreadCounts() {
+    return this.request('GET', '/messages/unread-counts');
+  }
+
   // ===== Utility: parse JWT to extract user_id =====
   parseToken() {
     if (!this.token) return null;

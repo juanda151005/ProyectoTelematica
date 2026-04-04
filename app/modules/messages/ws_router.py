@@ -7,7 +7,7 @@ from app.core.config import get_settings
 from app.core.database import SessionLocal
 from app.modules.groups.repository import GroupRepository
 from app.modules.groups.service import GroupsService
-from app.modules.messages.websocket import ws_manager
+from app.modules.messages.websocket import ws_manager, user_notify_manager
 from app.modules.presence.repository import PresenceRepository
 from app.modules.presence.service import PresenceService
 from app.modules.users.repository import UserRepository
@@ -53,4 +53,35 @@ async def group_ws(websocket: WebSocket, group_id: UUID, token: str = Query(defa
             PresenceService(PresenceRepository(db)).set_offline(user.id)
             user.status = UserStatus.OFFLINE
             db.commit()
+        db.close()
+
+
+@router.websocket('/ws/notifications')
+async def user_notifications_ws(websocket: WebSocket, token: str = Query(default='')):
+    """User-level WebSocket for cross-group notifications (unread badges, etc.)."""
+    db = SessionLocal()
+    user = None
+    try:
+        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
+        sub = payload.get('sub')
+        if not sub:
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+
+        user = UserRepository(db).get_by_id(UUID(sub))
+        if not user:
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+
+        await user_notify_manager.connect(user.id, websocket)
+
+        while True:
+            await websocket.receive_text()
+    except (JWTError, ValueError):
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+    except WebSocketDisconnect:
+        pass
+    finally:
+        if user:
+            user_notify_manager.disconnect(user.id, websocket)
         db.close()

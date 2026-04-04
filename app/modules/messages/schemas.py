@@ -33,3 +33,8 @@ class MessageOut(BaseModel):
     created_at: datetime
     receipts: list[MessageReceiptOut] = Field(default_factory=list)
     file_url: Optional[str] = None
+
+
+class UnreadCountOut(BaseModel):
+    group_id: UUID
+    count: int

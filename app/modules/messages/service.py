@@ -83,3 +83,7 @@ class MessagesService:
             self.messages_repo.save()
 
         return self.messages_repo.list_group_messages(group_id, limit=limit, offset=offset), list(updated_message_ids)
+
+    def get_unread_counts(self, user_id) -> dict:
+        """Returns {group_id: unread_count} for all groups with unread messages."""
+        return self.messages_repo.count_unread_per_group(user_id)

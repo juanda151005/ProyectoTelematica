@@ -10,7 +10,7 @@ from app.modules.groups.schemas import AddMemberRequest, GroupCreateRequest, Gro
 
 
 from app.modules.groups.service import GroupsService
-from app.modules.messages.websocket import ws_manager
+from app.modules.messages.websocket import ws_manager, user_notify_manager
 from app.modules.users.models import User
 from app.modules.users.repository import UserRepository
 from app.shared.exceptions import ConflictError, NotFoundError, PermissionDeniedError
@@ -18,7 +18,7 @@ from app.shared.exceptions import ConflictError, NotFoundError, PermissionDenied
 router = APIRouter(prefix='/groups', tags=['groups'])
 
 @router.post('/dm', response_model=GroupOut, status_code=status.HTTP_201_CREATED)
-def create_dm(
+async def create_dm(
     payload: CreateDMRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -31,6 +31,18 @@ def create_dm(
         target_user = user_repo.get_by_id(payload.user_id)
         if target_user:
             group.name = target_user.username
+
+        # Notify the target user about the new DM so it appears in their sidebar
+        await user_notify_manager.notify_user(payload.user_id, {
+            'event': 'added_to_group',
+            'data': {
+                'id': str(group.id),
+                'name': current_user.username,  # For the other user, show requester's name
+                'admin_id': str(group.admin_id),
+                'settings': group.settings,
+            }
+        })
+
         return group
     except NotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
@@ -67,7 +79,7 @@ async def add_member(
     service = GroupsService(GroupRepository(db), UserRepository(db))
     try:
         member = service.add_member(group_id, current_user.id, payload.username)
-        # Notify via websocket
+        # Notify via websocket (existing group members)
         user_repo = UserRepository(db)
         user = user_repo.get_by_username(payload.username)
         if user:
@@ -75,6 +87,20 @@ async def add_member(
                 'event': 'member_added',
                 'data': {'user_id': str(user.id), 'username': user.username, 'role': member.role}
             })
+
+            # Notify the added user so the group appears in their sidebar
+            group = GroupRepository(db).get_group(group_id)
+            if group:
+                await user_notify_manager.notify_user(user.id, {
+                    'event': 'added_to_group',
+                    'data': {
+                        'id': str(group.id),
+                        'name': group.name,
+                        'admin_id': str(group.admin_id),
+                        'settings': group.settings,
+                    }
+                })
+
         return GroupMemberOut(group_id=member.group_id, user_id=member.user_id, role=member.role)
     except NotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
