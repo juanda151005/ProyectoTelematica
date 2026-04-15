@@ -9,9 +9,6 @@ entryPoints:
     address: ":8080"
 
 providers:
-  docker:
-    exposedByDefault: false
-    network: groupsapp
   file:
     filename: /etc/traefik/dynamic.yml
     watch: true

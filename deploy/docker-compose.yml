@@ -67,7 +67,6 @@ services:
     volumes:
       - ../gateway/traefik/traefik.yml:/etc/traefik/traefik.yml:ro
       - ../gateway/traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
     networks: [groupsapp]
     depends_on: [users-auth-service, groups-service, messages-files-service, presence-notifications-service]
 
@@ -176,7 +175,8 @@ services:
   frontend:
     image: nginx:1.27-alpine
     volumes:
-      - ../static:/usr/share/nginx/html:ro
+      - ../static:/usr/share/nginx/html/static:ro
+      - ../static/index.html:/usr/share/nginx/html/index.html:ro
     networks: [groupsapp]
     labels:
       - "traefik.enable=true"

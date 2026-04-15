@@ -1,11 +1,72 @@
 http:
   middlewares:
-    strip-api:
-      stripPrefix:
-        prefixes: []
     cors-all:
       headers:
         accessControlAllowMethods: ["GET","POST","PUT","DELETE","OPTIONS","PATCH"]
         accessControlAllowOriginList: ["*"]
         accessControlAllowHeaders: ["Authorization","Content-Type","*"]
         accessControlMaxAge: 86400
+
+  routers:
+    users-auth:
+      rule: "(PathPrefix(`/api/v1/auth`) || PathPrefix(`/api/v1/users`)) && !PathRegexp(`^/api/v1/users/[^/]+/presence$`)"
+      entryPoints: [web]
+      service: users-auth
+      middlewares: [cors-all]
+      priority: 50
+
+    groups:
+      rule: "PathPrefix(`/api/v1/groups`) && !PathRegexp(`^/api/v1/groups/[^/]+/messages`)"
+      entryPoints: [web]
+      service: groups
+      middlewares: [cors-all]
+      priority: 50
+
+    messages:
+      rule: "PathPrefix(`/api/v1/messages`) || PathRegexp(`^/api/v1/groups/[^/]+/messages`) || PathPrefix(`/uploads`)"
+      entryPoints: [web]
+      service: messages
+      middlewares: [cors-all]
+      priority: 100
+
+    presence-ws:
+      rule: "PathPrefix(`/ws`)"
+      entryPoints: [web]
+      service: presence
+      middlewares: [cors-all]
+      priority: 200
+
+    presence-rest:
+      rule: "PathPrefix(`/api/v1/presence`) || PathRegexp(`^/api/v1/users/[^/]+/presence$`)"
+      entryPoints: [web]
+      service: presence
+      middlewares: [cors-all]
+      priority: 150
+
+    frontend:
+      rule: "PathPrefix(`/`)"
+      entryPoints: [web]
+      service: frontend
+      priority: 1
+
+  services:
+    users-auth:
+      loadBalancer:
+        servers:
+          - url: "http://users-auth-service:8000"
+    groups:
+      loadBalancer:
+        servers:
+          - url: "http://groups-service:8000"
+    messages:
+      loadBalancer:
+        servers:
+          - url: "http://messages-files-service:8000"
+    presence:
+      loadBalancer:
+        servers:
+          - url: "http://presence-notifications-service:8000"
+    frontend:
+      loadBalancer:
+        servers:
+          - url: "http://frontend:80"
