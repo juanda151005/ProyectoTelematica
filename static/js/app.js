@@ -298,16 +298,7 @@
     messagesContainer.classList.remove('hidden');
     messagesContainer.innerHTML = '';
 
-    // Load messages (mark_read=true marks them as read on the server)
-    try {
-      const messages = await api.getMessages(group.id, 100);
-      state.messages = messages;
-      renderMessages();
-    } catch (err) {
-      showToast(`Error cargando mensajes: ${err.message}`, 'error');
-    }
-
-    // Load actual members
+    // Load members first so the username cache is ready before rendering
     try {
       const members = await api.getMembers(group.id);
       state.members = members;
@@ -317,6 +308,15 @@
       if (state.membersPanelOpen) renderMembers();
     } catch (err) {
       console.warn('Error fetching members:', err.message);
+    }
+
+    // Load messages (mark_read=true marks them as read on the server)
+    try {
+      const messages = await api.getMessages(group.id, 100);
+      state.messages = messages;
+      renderMessages();
+    } catch (err) {
+      showToast(`Error cargando mensajes: ${err.message}`, 'error');
     }
 
     // Connect WebSocket
@@ -472,6 +472,11 @@
           if (!state.messages.find(m => m.id === msg.id)) {
             state.messages.push(msg);
             renderMessages();
+          }
+          // If this message is from someone else in the active group, mark it as read
+          // by re-fetching with mark_read=true so the sender gets the receipt via WS.
+          if (msg.sender_id !== state.currentUserId && msg.group_id === state.activeGroupId) {
+            api.getMessages(msg.group_id, 1).catch(() => {});
           }
         } else if (data.event === 'receipts_updated') {
           const updatedMsgs = data.data.messages || [];
