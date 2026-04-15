@@ -206,6 +206,7 @@
     state.messages = [];
     state.members = [];
     state.usernameCache = {};
+    state.dmPeerNames = {};
     state.unreadCounts = {};
     chatView.style.display = 'none';
     authView.style.display = 'flex';
@@ -233,33 +234,82 @@
     }
   }
 
+  function dmDisplayName(group) {
+    const peerName = state.dmPeerNames && state.dmPeerNames[group.id];
+    return peerName || 'Chat privado';
+  }
+
+  function buildGroupItem(group, displayName) {
+    const el = document.createElement('div');
+    el.className = `group-item${group.id === state.activeGroupId ? ' active' : ''}`;
+    const unread = state.unreadCounts[group.id] || 0;
+    const hasUnread = unread > 0 && group.id !== state.activeGroupId;
+    const initial = (displayName[0] || '?').toUpperCase();
+    el.innerHTML = `
+      <div class="group-avatar">${initial}</div>
+      <div class="group-item-info">
+        <div class="group-name${hasUnread ? ' has-unread' : ''}">${escapeHtml(displayName)}</div>
+        <div class="group-preview">${group.id === state.activeGroupId ? 'Activo' : ''}</div>
+      </div>
+      ${hasUnread ? `<div class="unread-badge">${unread > 99 ? '99+' : unread}</div>` : ''}
+    `;
+    el.onclick = () => selectGroup(group);
+    return el;
+  }
+
   function renderGroups() {
     groupsList.innerHTML = '';
-    if (state.groups.length === 0) {
-      groupsList.innerHTML = `
-        <div class="empty-state" style="padding: 40px 20px;">
-          <div class="icon">💬</div>
-          <p style="font-size:13px;">No tienes grupos aún. ¡Crea uno!</p>
-        </div>`;
-      return;
+    const realGroups = state.groups.filter(g => !(g.settings && g.settings.is_dm));
+    const dms = state.groups.filter(g => g.settings && g.settings.is_dm);
+
+    const groupsTitle = document.createElement('div');
+    groupsTitle.className = 'sidebar-section-title';
+    groupsTitle.textContent = 'Grupos';
+    groupsList.appendChild(groupsTitle);
+
+    if (realGroups.length === 0) {
+      const hint = document.createElement('div');
+      hint.className = 'sidebar-empty-hint';
+      hint.textContent = 'No tienes grupos aún. ¡Crea uno!';
+      groupsList.appendChild(hint);
+    } else {
+      realGroups.forEach(g => groupsList.appendChild(buildGroupItem(g, g.name)));
     }
 
-    state.groups.forEach(group => {
-      const el = document.createElement('div');
-      el.className = `group-item${group.id === state.activeGroupId ? ' active' : ''}`;
-      const unread = state.unreadCounts[group.id] || 0;
-      const hasUnread = unread > 0 && group.id !== state.activeGroupId;
-      el.innerHTML = `
-        <div class="group-avatar">${group.name[0].toUpperCase()}</div>
-        <div class="group-item-info">
-          <div class="group-name${hasUnread ? ' has-unread' : ''}">${escapeHtml(group.name)}</div>
-          <div class="group-preview">${group.id === state.activeGroupId ? 'Activo' : ''}</div>
-        </div>
-        ${hasUnread ? `<div class="unread-badge">${unread > 99 ? '99+' : unread}</div>` : ''}
-      `;
-      el.onclick = () => selectGroup(group);
-      groupsList.appendChild(el);
-    });
+    const dmsTitle = document.createElement('div');
+    dmsTitle.className = 'sidebar-section-title';
+    dmsTitle.textContent = 'Chats privados';
+    groupsList.appendChild(dmsTitle);
+
+    if (dms.length === 0) {
+      const hint = document.createElement('div');
+      hint.className = 'sidebar-empty-hint';
+      hint.textContent = 'Aún no tienes chats privados.';
+      groupsList.appendChild(hint);
+    } else {
+      dms.forEach(g => groupsList.appendChild(buildGroupItem(g, dmDisplayName(g))));
+    }
+
+    enrichDMNames(dms);
+  }
+
+  async function enrichDMNames(dms) {
+    if (!dms || dms.length === 0) return;
+    state.dmPeerNames = state.dmPeerNames || {};
+    let updated = false;
+    for (const dm of dms) {
+      if (state.dmPeerNames[dm.id]) continue;
+      try {
+        const members = await api.getMembers(dm.id);
+        const peer = members.find(m => m.user_id !== state.currentUserId);
+        if (peer && peer.username) {
+          state.dmPeerNames[dm.id] = peer.username;
+          state.usernameCache[peer.user_id] = peer.username;
+          updated = true;
+        }
+      } catch {}
+    }
+    if (updated) renderGroups();
   }
 
   async function createGroup() {
