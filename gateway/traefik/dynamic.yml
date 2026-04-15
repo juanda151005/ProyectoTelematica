@@ -1,0 +1,11 @@
+http:
+  middlewares:
+    strip-api:
+      stripPrefix:
+        prefixes: []
+    cors-all:
+      headers:
+        accessControlAllowMethods: ["GET","POST","PUT","DELETE","OPTIONS","PATCH"]
+        accessControlAllowOriginList: ["*"]
+        accessControlAllowHeaders: ["Authorization","Content-Type","*"]
+        accessControlMaxAge: 86400

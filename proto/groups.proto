@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package groupsapp.groups;
+
+service GroupsService {
+  rpc IsMember(IsMemberRequest) returns (IsMemberResponse);
+  rpc GetGroupMembers(GetGroupMembersRequest) returns (GetGroupMembersResponse);
+  rpc GetGroup(GetGroupRequest) returns (GroupReply);
+}
+
+message IsMemberRequest {
+  string group_id = 1;
+  string user_id = 2;
+}
+message IsMemberResponse {
+  bool is_member = 1;
+  string role = 2;
+}
+
+message GetGroupMembersRequest { string group_id = 1; }
+message GetGroupMembersResponse { repeated string user_ids = 1; }
+
+message GetGroupRequest { string group_id = 1; }
+message GroupReply {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  string created_by = 4;
+  bool is_direct = 5;
+}

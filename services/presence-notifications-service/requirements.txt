@@ -1,0 +1,12 @@
+fastapi==0.116.1
+uvicorn[standard]==0.35.0
+sqlalchemy==2.0.43
+pydantic-settings==2.10.1
+psycopg[binary]==3.2.10
+grpcio==1.66.2
+grpcio-tools==1.66.2
+protobuf==5.28.2
+aio-pika==9.4.3
+websockets==13.1
+httpx==0.28.1
+-e /libs/shared
