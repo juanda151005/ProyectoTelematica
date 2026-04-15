@@ -61,17 +61,49 @@ Browser ──HTTP/WS──► Traefik (API Gateway / AWS ALB Ingress)
 
 ## 2. Correr localmente
 
+### Requisitos
+
+- **Docker Desktop** corriendo (con al menos 4 GB de RAM asignados). En macOS: `brew install --cask docker-desktop && open -a Docker`.
+- Puertos libres en el host: `80`, `5432`, `5672`, `8080`, `8500`, `15672`.
+
+### Instalación
+
 ```bash
-docker compose -f deploy/docker-compose.yml up --build
+git clone -b feature/microservices-refactor https://github.com/juanda151005/ProyectoTelematica.git
+cd ProyectoTelematica
+chmod +x deploy/postgres/init-multiple-dbs.sh
+docker compose -f deploy/docker-compose.yml up -d --build
 ```
+
+La primera vez tarda 3–5 min mientras construye las imágenes. Luego el stack queda corriendo en segundo plano.
+
+### Acceso
 
 | Endpoint | URL |
 |---|---|
-| Frontend | http://localhost |
-| API Gateway | http://localhost/api/v1/... |
-| Traefik Dashboard | http://localhost:8080 |
-| RabbitMQ UI | http://localhost:15672 (`guest` / `guest`) |
-| Consul UI | http://localhost:8500 |
+| **App web** | <http://localhost> |
+| API Gateway | <http://localhost/api/v1/...> |
+| Traefik Dashboard | <http://localhost:8080> |
+| RabbitMQ UI | <http://localhost:15672> (`guest` / `guest`) |
+| Consul UI | <http://localhost:8500> |
+
+Abre <http://localhost>, regístrate con usuario y contraseña, crea un grupo y empieza a chatear.
+
+### Comandos útiles
+
+```bash
+# Estado de los 9 contenedores
+docker compose -f deploy/docker-compose.yml ps
+
+# Logs en vivo de un servicio
+docker compose -f deploy/docker-compose.yml logs -f users-auth-service
+
+# Detener manteniendo los datos
+docker compose -f deploy/docker-compose.yml down
+
+# Empezar de cero (borra BDs y uploads)
+docker compose -f deploy/docker-compose.yml down -v
+```
 
 ### Smoke test
 
