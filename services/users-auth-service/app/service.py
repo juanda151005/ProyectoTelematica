@@ -28,15 +28,16 @@ class UserService:
         self.db = db
 
     def register(self, data: UserRegister) -> User:
+        email = data.email or f"{data.username}@users.groupsapp.io"
         exists = self.db.execute(
-            select(User).where(or_(User.username == data.username, User.email == data.email))
+            select(User).where(or_(User.username == data.username, User.email == email))
         ).scalar_one_or_none()
         if exists:
             raise ValueError("username or email already registered")
 
         user = User(
             username=data.username,
-            email=data.email,
+            email=email,
             full_name=data.full_name,
             hashed_password=_hash_password(data.password),
         )
