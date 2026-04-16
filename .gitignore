@@ -11,3 +11,7 @@ uploads/
 .pytest_cache/
 .mypy_cache/
 .DS_Store
+libs/shared/groupsapp_shared/proto_gen/
+*.egg-info/
+dist/
+build/

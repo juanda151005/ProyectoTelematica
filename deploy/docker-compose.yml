@@ -1,0 +1,186 @@
+name: groupsapp
+
+networks:
+  groupsapp:
+    name: groupsapp
+
+volumes:
+  pg_data:
+  rabbitmq_data:
+  consul_data:
+  uploads:
+
+services:
+  # ---------- Infrastructure ----------
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: groupsapp
+      POSTGRES_PASSWORD: groupsapp
+      POSTGRES_DB: postgres
+      POSTGRES_MULTIPLE_DATABASES: "users_auth,groups,messages,presence"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./postgres/init-multiple-dbs.sh:/docker-entrypoint-initdb.d/00-init.sh:ro
+    ports:
+      - "5432:5432"
+    networks: [groupsapp]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U groupsapp -d postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks: [groupsapp]
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  consul:
+    image: hashicorp/consul:1.19
+    command: "agent -server -bootstrap -ui -client=0.0.0.0"
+    ports:
+      - "8500:8500"
+    volumes:
+      - consul_data:/consul/data
+    networks: [groupsapp]
+
+  traefik:
+    image: traefik:v3.1
+    command:
+      - "--configfile=/etc/traefik/traefik.yml"
+    ports:
+      - "80:80"
+      - "8080:8080"
+    volumes:
+      - ../gateway/traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ../gateway/traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
+    networks: [groupsapp]
+    depends_on: [users-auth-service, groups-service, messages-files-service, presence-notifications-service]
+
+  # ---------- Microservices ----------
+  users-auth-service:
+    build:
+      context: ..
+      dockerfile: services/users-auth-service/Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg://groupsapp:groupsapp@postgres:5432/users_auth
+      AMQP_URL: amqp://guest:guest@rabbitmq:5672/
+      CONSUL_URL: http://consul:8500
+      SECRET_KEY: groupsapp-super-secret-change-me-32chars
+      ACCESS_TOKEN_EXPIRE_MINUTES: "120"
+    depends_on:
+      postgres: {condition: service_healthy}
+      rabbitmq: {condition: service_healthy}
+    networks: [groupsapp]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.users-auth.rule=PathPrefix(`/api/v1/auth`) || PathPrefix(`/api/v1/users`) && !PathRegexp(`^/api/v1/users/[^/]+/presence$`)"
+      - "traefik.http.routers.users-auth.entrypoints=web"
+      - "traefik.http.services.users-auth.loadbalancer.server.port=8000"
+      - "traefik.http.routers.users-auth.middlewares=cors-all@file"
+
+  groups-service:
+    build:
+      context: ..
+      dockerfile: services/groups-service/Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg://groupsapp:groupsapp@postgres:5432/groups
+      AMQP_URL: amqp://guest:guest@rabbitmq:5672/
+      CONSUL_URL: http://consul:8500
+      SECRET_KEY: groupsapp-super-secret-change-me-32chars
+      USERS_GRPC_ADDR: users-auth-service:50051
+    depends_on:
+      postgres: {condition: service_healthy}
+      rabbitmq: {condition: service_healthy}
+      users-auth-service: {condition: service_started}
+    networks: [groupsapp]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.groups.rule=PathPrefix(`/api/v1/groups`)"
+      - "traefik.http.routers.groups.entrypoints=web"
+      - "traefik.http.services.groups.loadbalancer.server.port=8000"
+      - "traefik.http.routers.groups.middlewares=cors-all@file"
+
+  messages-files-service:
+    build:
+      context: ..
+      dockerfile: services/messages-files-service/Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg://groupsapp:groupsapp@postgres:5432/messages
+      AMQP_URL: amqp://guest:guest@rabbitmq:5672/
+      CONSUL_URL: http://consul:8500
+      SECRET_KEY: groupsapp-super-secret-change-me-32chars
+      GROUPS_GRPC_ADDR: groups-service:50052
+      USERS_GRPC_ADDR: users-auth-service:50051
+      UPLOAD_DIR: /data/uploads
+      PUBLIC_URL_BASE: /uploads
+    volumes:
+      - uploads:/data/uploads
+    depends_on:
+      postgres: {condition: service_healthy}
+      rabbitmq: {condition: service_healthy}
+      groups-service: {condition: service_started}
+    networks: [groupsapp]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.messages.rule=PathPrefix(`/api/v1/messages`) || PathRegexp(`^/api/v1/groups/[^/]+/messages`) || PathPrefix(`/uploads`)"
+      - "traefik.http.routers.messages.entrypoints=web"
+      - "traefik.http.services.messages.loadbalancer.server.port=8000"
+      - "traefik.http.routers.messages.priority=100"
+      - "traefik.http.routers.messages.middlewares=cors-all@file"
+
+  presence-notifications-service:
+    build:
+      context: ..
+      dockerfile: services/presence-notifications-service/Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg://groupsapp:groupsapp@postgres:5432/presence
+      AMQP_URL: amqp://guest:guest@rabbitmq:5672/
+      CONSUL_URL: http://consul:8500
+      SECRET_KEY: groupsapp-super-secret-change-me-32chars
+      GROUPS_GRPC_ADDR: groups-service:50052
+      USERS_GRPC_ADDR: users-auth-service:50051
+    depends_on:
+      postgres: {condition: service_healthy}
+      rabbitmq: {condition: service_healthy}
+      groups-service: {condition: service_started}
+    networks: [groupsapp]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.presence-ws.rule=PathPrefix(`/ws`)"
+      - "traefik.http.routers.presence-ws.entrypoints=web"
+      - "traefik.http.routers.presence-ws.service=presence"
+      - "traefik.http.routers.presence-ws.priority=200"
+      - "traefik.http.routers.presence-rest.rule=PathPrefix(`/api/v1/presence`) || PathRegexp(`^/api/v1/users/[^/]+/presence$`)"
+      - "traefik.http.routers.presence-rest.entrypoints=web"
+      - "traefik.http.routers.presence-rest.service=presence"
+      - "traefik.http.routers.presence-rest.priority=150"
+      - "traefik.http.services.presence.loadbalancer.server.port=8000"
+      - "traefik.http.routers.presence-ws.middlewares=cors-all@file"
+
+  # ---------- Frontend (static) ----------
+  frontend:
+    image: nginx:1.27-alpine
+    volumes:
+      - ../static:/usr/share/nginx/html/static:ro
+      - ../static/index.html:/usr/share/nginx/html/index.html:ro
+    networks: [groupsapp]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.frontend.rule=PathPrefix(`/`) || PathPrefix(`/static`)"
+      - "traefik.http.routers.frontend.entrypoints=web"
+      - "traefik.http.routers.frontend.priority=1"
+      - "traefik.http.services.frontend.loadbalancer.server.port=80"

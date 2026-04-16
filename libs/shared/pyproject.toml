@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "groupsapp-shared"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+  "pydantic-settings>=2.0",
+  "python-jose[cryptography]>=3.3",
+  "aio-pika>=9.4",
+  "grpcio>=1.65",
+  "grpcio-tools>=1.65",
+  "protobuf>=5.27",
+]
+
+[tool.setuptools.packages.find]
+include = ["groupsapp_shared*"]

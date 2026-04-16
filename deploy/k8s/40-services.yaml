@@ -1,0 +1,182 @@
+# Four microservice Deployments + Services + HPAs.
+# Images must be built and pushed to an accessible registry first:
+#   docker build -t <registry>/groupsapp-users-auth:latest -f services/users-auth-service/Dockerfile .
+#   (repeat for groups, messages-files, presence-notifications)
+# Then replace the image: placeholders below.
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: users-auth-service, namespace: groupsapp}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: users-auth-service}}
+  template:
+    metadata: {labels: {app: users-auth-service}}
+    spec:
+      containers:
+        - name: app
+          image: REGISTRY/groupsapp-users-auth:latest
+          ports: [{containerPort: 8000}, {containerPort: 50051}]
+          envFrom:
+            - configMapRef: {name: groupsapp-config}
+            - secretRef: {name: groupsapp-secret}
+          env:
+            - {name: DATABASE_URL, value: "postgresql+psycopg://groupsapp:$(POSTGRES_PASSWORD)@postgres:5432/users_auth"}
+          readinessProbe: {httpGet: {path: /health, port: 8000}, initialDelaySeconds: 10}
+          livenessProbe:  {httpGet: {path: /health, port: 8000}, initialDelaySeconds: 30}
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits:   {cpu: 500m, memory: 512Mi}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: users-auth-service, namespace: groupsapp}
+spec:
+  selector: {app: users-auth-service}
+  ports:
+    - {name: http, port: 8000, targetPort: 8000}
+    - {name: grpc, port: 50051, targetPort: 50051}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata: {name: users-auth-service, namespace: groupsapp}
+spec:
+  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: users-auth-service}
+  minReplicas: 2
+  maxReplicas: 6
+  metrics:
+    - type: Resource
+      resource: {name: cpu, target: {type: Utilization, averageUtilization: 70}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: groups-service, namespace: groupsapp}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: groups-service}}
+  template:
+    metadata: {labels: {app: groups-service}}
+    spec:
+      containers:
+        - name: app
+          image: REGISTRY/groupsapp-groups:latest
+          ports: [{containerPort: 8000}, {containerPort: 50052}]
+          envFrom:
+            - configMapRef: {name: groupsapp-config}
+            - secretRef: {name: groupsapp-secret}
+          env:
+            - {name: DATABASE_URL, value: "postgresql+psycopg://groupsapp:$(POSTGRES_PASSWORD)@postgres:5432/groups"}
+          readinessProbe: {httpGet: {path: /health, port: 8000}, initialDelaySeconds: 10}
+          livenessProbe:  {httpGet: {path: /health, port: 8000}, initialDelaySeconds: 30}
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits:   {cpu: 500m, memory: 512Mi}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: groups-service, namespace: groupsapp}
+spec:
+  selector: {app: groups-service}
+  ports:
+    - {name: http, port: 8000, targetPort: 8000}
+    - {name: grpc, port: 50052, targetPort: 50052}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata: {name: groups-service, namespace: groupsapp}
+spec:
+  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: groups-service}
+  minReplicas: 2
+  maxReplicas: 6
+  metrics: [{type: Resource, resource: {name: cpu, target: {type: Utilization, averageUtilization: 70}}}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: messages-files-service, namespace: groupsapp}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: messages-files-service}}
+  template:
+    metadata: {labels: {app: messages-files-service}}
+    spec:
+      containers:
+        - name: app
+          image: REGISTRY/groupsapp-messages:latest
+          ports: [{containerPort: 8000}]
+          envFrom:
+            - configMapRef: {name: groupsapp-config}
+            - secretRef: {name: groupsapp-secret}
+          env:
+            - {name: DATABASE_URL, value: "postgresql+psycopg://groupsapp:$(POSTGRES_PASSWORD)@postgres:5432/messages"}
+          volumeMounts: [{name: uploads, mountPath: /data/uploads}]
+          readinessProbe: {httpGet: {path: /health, port: 8000}, initialDelaySeconds: 10}
+          livenessProbe:  {httpGet: {path: /health, port: 8000}, initialDelaySeconds: 30}
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits:   {cpu: 500m, memory: 512Mi}
+      volumes:
+        - name: uploads
+          persistentVolumeClaim: {claimName: uploads-pvc}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: {name: uploads-pvc, namespace: groupsapp}
+spec:
+  accessModes: [ReadWriteMany]
+  resources: {requests: {storage: 20Gi}}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: messages-files-service, namespace: groupsapp}
+spec:
+  selector: {app: messages-files-service}
+  ports: [{name: http, port: 8000, targetPort: 8000}]
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata: {name: messages-files-service, namespace: groupsapp}
+spec:
+  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: messages-files-service}
+  minReplicas: 2
+  maxReplicas: 8
+  metrics: [{type: Resource, resource: {name: cpu, target: {type: Utilization, averageUtilization: 70}}}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: presence-notifications-service, namespace: groupsapp}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: presence-notifications-service}}
+  template:
+    metadata: {labels: {app: presence-notifications-service}}
+    spec:
+      containers:
+        - name: app
+          image: REGISTRY/groupsapp-presence:latest
+          ports: [{containerPort: 8000}]
+          envFrom:
+            - configMapRef: {name: groupsapp-config}
+            - secretRef: {name: groupsapp-secret}
+          env:
+            - {name: DATABASE_URL, value: "postgresql+psycopg://groupsapp:$(POSTGRES_PASSWORD)@postgres:5432/presence"}
+          readinessProbe: {httpGet: {path: /health, port: 8000}, initialDelaySeconds: 10}
+          livenessProbe:  {httpGet: {path: /health, port: 8000}, initialDelaySeconds: 30}
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits:   {cpu: 500m, memory: 512Mi}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: presence-notifications-service, namespace: groupsapp}
+spec:
+  selector: {app: presence-notifications-service}
+  ports: [{name: http, port: 8000, targetPort: 8000}]
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata: {name: presence-notifications-service, namespace: groupsapp}
+spec:
+  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: presence-notifications-service}
+  minReplicas: 2
+  maxReplicas: 8
+  metrics: [{type: Resource, resource: {name: cpu, target: {type: Utilization, averageUtilization: 70}}}]

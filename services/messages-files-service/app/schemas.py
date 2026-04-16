@@ -1,0 +1,43 @@
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Optional
+from uuid import UUID
+
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class MessageCreateRequest(BaseModel):
+    content: Optional[str] = Field(default=None, max_length=5000)
+    recipient_id: Optional[UUID] = None
+
+
+class MessageReceiptOut(BaseModel):
+    user_id: UUID
+    delivered_at: Optional[datetime]
+    read_at: Optional[datetime]
+
+
+class MessageOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    sender_id: UUID
+    group_id: UUID
+    recipient_id: Optional[UUID]
+    content: Optional[str]
+    message_type: str
+    status: str
+    created_at: datetime
+    receipts: list[MessageReceiptOut] = Field(default_factory=list)
+    file_url: Optional[str] = None
+
+
+class UnreadCountOut(BaseModel):
+    group_id: UUID
+    count: int
+
+
+class FileUploadResponse(BaseModel):
+    message_id: UUID
+    file_id: UUID
+    file_url: str

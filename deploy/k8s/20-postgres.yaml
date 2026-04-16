@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: groupsapp
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels: {app: postgres}
+  template:
+    metadata:
+      labels: {app: postgres}
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          env:
+            - name: POSTGRES_USER
+              value: groupsapp
+            - name: POSTGRES_PASSWORD
+              valueFrom: {secretKeyRef: {name: groupsapp-secret, key: POSTGRES_PASSWORD}}
+            - name: POSTGRES_DB
+              value: postgres
+            - name: POSTGRES_MULTIPLE_DATABASES
+              value: "users_auth,groups,messages,presence"
+          ports:
+            - containerPort: 5432
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: init
+              mountPath: /docker-entrypoint-initdb.d
+      volumes:
+        - name: init
+          configMap:
+            name: postgres-init
+            defaultMode: 0755
+  volumeClaimTemplates:
+    - metadata: {name: data}
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources: {requests: {storage: 10Gi}}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: postgres, namespace: groupsapp}
+spec:
+  clusterIP: None
+  selector: {app: postgres}
+  ports: [{port: 5432, targetPort: 5432}]
+---
+apiVersion: v1
+kind: ConfigMap
+metadata: {name: postgres-init, namespace: groupsapp}
+data:
+  init.sh: |
+    #!/bin/bash
+    set -e
+    for db in users_auth groups messages presence; do
+      psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" -c "SELECT 'CREATE DATABASE \"$db\"' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '$db')\\gexec"
+    done
