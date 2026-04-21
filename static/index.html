@@ -12,41 +12,56 @@
   <!-- ===== AUTH VIEW ===== -->
   <div id="auth-view">
     <div class="auth-card">
-      <h1>💬 GroupsApp</h1>
-      <p class="subtitle">Mensajería instantánea en tiempo real</p>
-
-      <div class="auth-tabs">
-        <button class="auth-tab active" data-tab="login">Iniciar Sesión</button>
-        <button class="auth-tab" data-tab="register">Registrarse</button>
+      <!-- Welcome Section -->
+      <div id="auth-welcome">
+        <h1>💬 GroupsApp</h1>
+        <p class="subtitle">¡Hola! Qué bueno verte por aquí.</p>
+        <p style="text-align: center; font-size: 14px; color: var(--text-secondary); margin-bottom: 24px;">
+          Tu plataforma de mensajería distribuida, segura y ultra rápida.
+        </p>
+        <div class="welcome-actions">
+          <button class="btn-primary" id="btn-go-login">Ya tengo una cuenta</button>
+          <button class="btn-secondary" id="btn-go-register" style="width: 100%; margin-top: 12px; padding: 13px;">Soy nuevo aquí</button>
+        </div>
       </div>
 
-      <div id="auth-error" class="auth-error"></div>
+      <!-- Auth Content (Hidden initially) -->
+      <div id="auth-content" class="hidden">
+        <div class="auth-tabs">
+          <button class="auth-tab active" data-tab="login">Iniciar Sesión</button>
+          <button class="auth-tab" data-tab="register">Registrarse</button>
+        </div>
 
-      <!-- Login Form -->
-      <form id="login-form">
-        <div class="form-group">
-          <label>Username</label>
-          <input type="text" id="login-username" placeholder="Tu username" required minlength="3" autocomplete="username">
-        </div>
-        <div class="form-group">
-          <label>Contraseña</label>
-          <input type="password" id="login-password" placeholder="Tu contraseña" required minlength="6" autocomplete="current-password">
-        </div>
-        <button type="submit" class="btn-primary">Iniciar Sesión</button>
-      </form>
+        <div id="auth-error" class="auth-error"></div>
 
-      <!-- Register Form -->
-      <form id="register-form" class="hidden">
-        <div class="form-group">
-          <label>Username</label>
-          <input type="text" id="register-username" placeholder="Escoge un username" required minlength="3" autocomplete="username">
-        </div>
-        <div class="form-group">
-          <label>Contraseña</label>
-          <input type="password" id="register-password" placeholder="Mínimo 6 caracteres" required minlength="6" autocomplete="new-password">
-        </div>
-        <button type="submit" class="btn-primary">Crear Cuenta</button>
-      </form>
+        <!-- Login Form -->
+        <form id="login-form">
+          <div class="form-group">
+            <label>Username</label>
+            <input type="text" id="login-username" placeholder="Tu username" required minlength="3" autocomplete="username">
+          </div>
+          <div class="form-group">
+            <label>Contraseña</label>
+            <input type="password" id="login-password" placeholder="Tu contraseña" required minlength="6" autocomplete="current-password">
+          </div>
+          <button type="submit" class="btn-primary">Entrar</button>
+        </form>
+
+        <!-- Register Form -->
+        <form id="register-form" class="hidden">
+          <div class="form-group">
+            <label>Username</label>
+            <input type="text" id="register-username" placeholder="Escoge un username" required minlength="3" autocomplete="username">
+          </div>
+          <div class="form-group">
+            <label>Contraseña</label>
+            <input type="password" id="register-password" placeholder="Mínimo 6 caracteres" required minlength="6" autocomplete="new-password">
+          </div>
+          <button type="submit" class="btn-primary">Crear Cuenta</button>
+        </form>
+        
+        <button id="btn-back-welcome" style="background:none; border:none; color:var(--text-muted); font-size:12px; margin-top:20px; width:100%; cursor:pointer;">← Volver al inicio</button>
+      </div>
     </div>
   </div>
 

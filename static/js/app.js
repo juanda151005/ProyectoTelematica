@@ -143,14 +143,37 @@
 
   // ===== Auth =====
   function initAuth() {
+    const welcomeSection = $('#auth-welcome');
+    const authContent = $('#auth-content');
+    const btnGoLogin = $('#btn-go-login');
+    const btnGoRegister = $('#btn-go-register');
+    const btnBackWelcome = $('#btn-back-welcome');
+
+    function showForm(tab) {
+      welcomeSection.classList.add('hidden');
+      authContent.classList.remove('hidden');
+      
+      authTabs.forEach(t => {
+        const isActive = t.dataset.tab === tab;
+        t.classList.toggle('active', isActive);
+      });
+      
+      loginForm.classList.toggle('hidden', tab !== 'login');
+      registerForm.classList.toggle('hidden', tab !== 'register');
+      authError.textContent = '';
+    }
+
+    btnGoLogin.onclick = () => showForm('login');
+    btnGoRegister.onclick = () => showForm('register');
+    btnBackWelcome.onclick = () => {
+      authContent.classList.add('hidden');
+      welcomeSection.classList.remove('hidden');
+    };
+
     authTabs.forEach(tab => {
       tab.addEventListener('click', () => {
         const target = tab.dataset.tab;
-        authTabs.forEach(t => t.classList.remove('active'));
-        tab.classList.add('active');
-        loginForm.classList.toggle('hidden', target !== 'login');
-        registerForm.classList.toggle('hidden', target !== 'register');
-        authError.textContent = '';
+        showForm(target);
       });
     });
 
