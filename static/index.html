@@ -58,6 +58,7 @@
       <aside class="sidebar">
         <div class="sidebar-header">
           <h2>💬 GroupsApp</h2>
+          <button class="btn-icon sidebar-close-btn" id="btn-close-sidebar" title="Cerrar menú">✕</button>
         </div>
 
         <div class="user-info">
@@ -83,6 +84,7 @@
         <!-- Chat Header -->
         <div class="chat-header hidden" id="chat-header">
           <div class="chat-header-info">
+            <button class="btn-icon mobile-only" id="btn-open-sidebar" title="Ver grupos" style="margin-right: 10px;">☰</button>
             <div>
               <h3 id="chat-group-name">Grupo</h3>
               <div class="member-count" id="chat-member-count">0 miembros</div>
@@ -119,13 +121,19 @@
       <aside class="members-panel" id="members-panel">
         <div class="members-header">
           <h4>Miembros</h4>
-          <button class="btn-add-member" id="btn-add-member">＋ Agregar</button>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <button class="btn-add-member" id="btn-add-member">＋ Agregar</button>
+            <button class="btn-icon" id="btn-close-members" title="Cerrar panel" style="width: 32px; height: 32px; font-size: 14px;">✕</button>
+          </div>
         </div>
         <div class="members-list" id="members-list"></div>
       </aside>
 
     </div>
   </div>
+
+  <!-- Sidebar Overlay (mobile) -->
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
 
   <!-- Modal Overlay -->
   <div class="modal-overlay" id="modal-overlay"></div>

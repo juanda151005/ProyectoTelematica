@@ -33,9 +33,13 @@
   const authError = $('#auth-error');
 
   // Sidebar
+  const sidebar = $('.sidebar');
   const userAvatar = $('#user-avatar');
   const usernameDisplay = $('#username-display');
   const groupsList = $('#groups-list');
+  const btnCloseSidebar = $('#btn-close-sidebar');
+  const btnOpenSidebar = $('#btn-open-sidebar');
+  const sidebarOverlay = $('#sidebar-overlay');
 
   // Chat
   const chatHeader = $('#chat-header');
@@ -54,6 +58,7 @@
   // Members panel
   const membersPanel = $('#members-panel');
   const membersList = $('#members-list');
+  const btnCloseMembers = $('#btn-close-members');
 
   // Modals
   const modalOverlay = $('#modal-overlay');
@@ -338,6 +343,11 @@
 
     // Clear unread count for this group
     state.unreadCounts[group.id] = 0;
+
+    // Close sidebar on mobile
+    if (window.innerWidth <= 640) {
+      toggleSidebar(false);
+    }
 
     // Update UI
     renderGroups();
@@ -658,10 +668,23 @@
     }
   }
 
+  // ===== UI Helpers =====
+  function toggleSidebar(open) {
+    if (open === undefined) open = !sidebar.classList.contains('mobile-open');
+    sidebar.classList.toggle('mobile-open', open);
+    sidebarOverlay.classList.toggle('active', open);
+  }
+
   // ===== Members =====
   function toggleMembersPanel() {
     state.membersPanelOpen = !state.membersPanelOpen;
     membersPanel.classList.toggle('open', state.membersPanelOpen);
+    
+    // Toggle overlay on mobile/tablet
+    if (window.innerWidth <= 1024) {
+      sidebarOverlay.classList.toggle('active', state.membersPanelOpen);
+    }
+
     if (state.membersPanelOpen) {
       renderMembers();
     }
@@ -953,6 +976,17 @@
         }
       };
     }
+
+    // Responsive Sidebar
+    if (btnOpenSidebar) btnOpenSidebar.onclick = () => toggleSidebar(true);
+    if (btnCloseSidebar) btnCloseSidebar.onclick = () => toggleSidebar(false);
+    if (sidebarOverlay) sidebarOverlay.onclick = () => {
+      toggleSidebar(false);
+      if (state.membersPanelOpen) toggleMembersPanel();
+    };
+
+    // Responsive Members
+    if (btnCloseMembers) btnCloseMembers.onclick = () => toggleMembersPanel();
   }
 
   // ===== Init =====
