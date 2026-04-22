@@ -63,18 +63,34 @@ class GroupsService:
         if not group:
             raise NotFoundError("Grupo no encontrado")
 
-        if group.settings.get("is_dm"):
-            if requester_id != target_id:
-                raise PermissionDeniedError("En un chat privado solo puedes eliminarte a ti mismo")
+        is_leaving = (requester_id == target_id)
+
+        if not group.settings.get("is_dm"):
+            if not is_leaving:
+                # Kicking someone else: must be admin
+                self._ensure_admin(group, requester_id)
+                if group.admin_id == target_id:
+                    raise PermissionDeniedError("El creador del grupo no puede ser expulsado por otros")
+            # If leaving voluntarily, no admin check needed
         else:
-            self._ensure_admin(group, requester_id)
-            if group.admin_id == target_id:
-                raise PermissionDeniedError("El creador del grupo no puede ser eliminado")
+            if not is_leaving:
+                raise PermissionDeniedError("En un chat privado solo puedes eliminarte a ti mismo")
 
         m = self.repo.get_member(group_id, target_id)
         if not m:
             raise NotFoundError("El usuario no pertenece al grupo")
+        
         self.repo.delete_member(m)
+
+        # If the creator left a regular group, promote a new owner if possible
+        if not group.settings.get("is_dm") and group.admin_id == target_id:
+            remaining = self.repo.list_members(group_id)
+            if remaining:
+                # Promote the first available member to admin
+                new_admin = remaining[0]
+                group.admin_id = new_admin.user_id
+                new_admin.role = ROLE_ADMIN
+                self.repo.save()
 
     def update_role(self, group_id: uuid.UUID, requester_id: uuid.UUID, target_id: uuid.UUID, role: str) -> GroupMember:
         group = self.repo.get_group(group_id)

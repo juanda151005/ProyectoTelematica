@@ -994,6 +994,10 @@
         if (!confirm('¿Estás seguro de que deseas abandonar este chat?')) return;
         try {
           await api.removeMember(state.activeGroupId, state.currentUserId);
+          showToast('Has abandonado el grupo', 'success');
+          state.activeGroupId = null;
+          showEmptyChat();
+          loadGroups();
         } catch (err) {
           showToast(`Error: ${err.message}`, 'error');
         }

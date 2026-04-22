@@ -35,9 +35,17 @@ class ApiClient {
     }
 
     const res = await fetch(url, opts);
-    const data = res.headers.get('content-type')?.includes('json')
-      ? await res.json()
-      : await res.text();
+    
+    let data;
+    const contentType = res.headers.get('content-type');
+    
+    if (res.status === 204) {
+      data = null;
+    } else if (contentType && contentType.includes('json')) {
+      data = await res.json();
+    } else {
+      data = await res.text();
+    }
 
     if (!res.ok) {
       const msg = typeof data === 'object' ? data.detail || JSON.stringify(data) : data;
