@@ -1,0 +1,136 @@
+# =============================================================================
+# GROUPSAPP — CloudWatch Container Insights & Fluent Bit logging
+# =============================================================================
+# This deploys Fluent Bit as a DaemonSet to ship all container logs from every
+# EKS node to Amazon CloudWatch Logs. This satisfies Requirement 8
+# (Gestión de logs y métricas básicas).
+#
+# PREREQUISITES:
+#   1. Attach the CloudWatchAgentServerPolicy IAM policy to the EC2 node role
+#      (the role attached to your EKS node group).
+#   2. Enable CloudWatch Container Insights when creating/updating the cluster:
+#        aws eks update-cluster-config --name <CLUSTER> \
+#          --logging '{"clusterLogging":[{"types":["api","audit","authenticator","controllerManager","scheduler"],"enabled":true}]}'
+#   3. Replace REPLACE_REGION and REPLACE_CLUSTER_NAME below.
+# =============================================================================
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: amazon-cloudwatch
+  labels:
+    name: amazon-cloudwatch
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fluent-bit
+  namespace: amazon-cloudwatch
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: fluent-bit-role
+rules:
+  - apiGroups: [""]
+    resources: [namespaces, pods, pods/logs, nodes, nodes/proxy]
+    verbs: [get, list, watch]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: fluent-bit-role-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: fluent-bit-role
+subjects:
+  - kind: ServiceAccount
+    name: fluent-bit
+    namespace: amazon-cloudwatch
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fluent-bit-cluster-info
+  namespace: amazon-cloudwatch
+data:
+  cluster.name: REPLACE_CLUSTER_NAME
+  http.server: "On"
+  http.port: "2020"
+  read.head: "Off"
+  read.tail: "On"
+  logs.region: REPLACE_REGION
+
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: fluent-bit
+  namespace: amazon-cloudwatch
+  labels:
+    k8s-app: fluent-bit
+spec:
+  selector:
+    matchLabels: {k8s-app: fluent-bit}
+  template:
+    metadata:
+      labels: {k8s-app: fluent-bit}
+    spec:
+      serviceAccountName: fluent-bit
+      tolerations:
+        - key: node-role.kubernetes.io/master
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: fluent-bit
+          image: public.ecr.aws/aws-observability/aws-for-fluent-bit:stable
+          imagePullPolicy: Always
+          env:
+            - name: AWS_REGION
+              valueFrom: {configMapKeyRef: {name: fluent-bit-cluster-info, key: logs.region}}
+            - name: CLUSTER_NAME
+              valueFrom: {configMapKeyRef: {name: fluent-bit-cluster-info, key: cluster.name}}
+            - name: HTTP_SERVER
+              valueFrom: {configMapKeyRef: {name: fluent-bit-cluster-info, key: http.server}}
+            - name: HTTP_PORT
+              valueFrom: {configMapKeyRef: {name: fluent-bit-cluster-info, key: http.port}}
+            - name: READ_FROM_HEAD
+              valueFrom: {configMapKeyRef: {name: fluent-bit-cluster-info, key: read.head}}
+            - name: READ_FROM_TAIL
+              valueFrom: {configMapKeyRef: {name: fluent-bit-cluster-info, key: read.tail}}
+          resources:
+            limits:   {cpu: 200m, memory: 200Mi}
+            requests: {cpu: 50m,  memory: 50Mi}
+          volumeMounts:
+            - name: fluentbitstate
+              mountPath: /var/fluent-bit/state
+            - name: varlog
+              mountPath: /var/log
+              readOnly: true
+            - name: varlibdockercontainers
+              mountPath: /var/lib/docker/containers
+              readOnly: true
+            - name: runlogjournal
+              mountPath: /run/log/journal
+              readOnly: true
+            - name: dmesg
+              mountPath: /var/log/dmesg
+              readOnly: true
+      volumes:
+        - name: fluentbitstate
+          hostPath: {path: /var/fluent-bit/state}
+        - name: varlog
+          hostPath: {path: /var/log}
+        - name: varlibdockercontainers
+          hostPath: {path: /var/lib/docker/containers}
+        - name: runlogjournal
+          hostPath: {path: /run/log/journal}
+        - name: dmesg
+          hostPath: {path: /var/log/dmesg}
+      terminationGracePeriodSeconds: 10

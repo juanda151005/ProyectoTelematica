@@ -1,62 +1,28 @@
-apiVersion: apps/v1
-kind: StatefulSet
+# =============================================================================
+# GROUPSAPP — PostgreSQL via Amazon RDS (EXTERNAL)
+# =============================================================================
+# This file does NOT deploy PostgreSQL as a Pod.
+# Instead it creates a Kubernetes ExternalName Service that points to your
+# Amazon RDS endpoint, so all services can connect with the same hostname
+# "postgres" they already use in their DATABASE_URL env vars.
+#
+# SETUP STEPS:
+#   1. Create an Amazon RDS PostgreSQL 16 Multi-AZ instance in the same VPC
+#      as your EKS cluster.
+#   2. Create four databases on it: users_auth, groups, messages, presence
+#      (run the SQL from deploy/postgres/init-multiple-dbs.sh against RDS).
+#   3. Replace REPLACE_WITH_RDS_ENDPOINT below with the actual RDS endpoint,
+#      e.g.: groupsapp.abcdef123.us-east-1.rds.amazonaws.com
+# =============================================================================
+---
+apiVersion: v1
+kind: Service
 metadata:
   name: postgres
   namespace: groupsapp
 spec:
-  serviceName: postgres
-  replicas: 1
-  selector:
-    matchLabels: {app: postgres}
-  template:
-    metadata:
-      labels: {app: postgres}
-    spec:
-      containers:
-        - name: postgres
-          image: postgres:16-alpine
-          env:
-            - name: POSTGRES_USER
-              value: groupsapp
-            - name: POSTGRES_PASSWORD
-              valueFrom: {secretKeyRef: {name: groupsapp-secret, key: POSTGRES_PASSWORD}}
-            - name: POSTGRES_DB
-              value: postgres
-            - name: POSTGRES_MULTIPLE_DATABASES
-              value: "users_auth,groups,messages,presence"
-          ports:
-            - containerPort: 5432
-          volumeMounts:
-            - name: data
-              mountPath: /var/lib/postgresql/data
-            - name: init
-              mountPath: /docker-entrypoint-initdb.d
-      volumes:
-        - name: init
-          configMap:
-            name: postgres-init
-            defaultMode: 0755
-  volumeClaimTemplates:
-    - metadata: {name: data}
-      spec:
-        accessModes: ["ReadWriteOnce"]
-        resources: {requests: {storage: 10Gi}}
----
-apiVersion: v1
-kind: Service
-metadata: {name: postgres, namespace: groupsapp}
-spec:
-  clusterIP: None
-  selector: {app: postgres}
-  ports: [{port: 5432, targetPort: 5432}]
----
-apiVersion: v1
-kind: ConfigMap
-metadata: {name: postgres-init, namespace: groupsapp}
-data:
-  init.sh: |
-    #!/bin/bash
-    set -e
-    for db in users_auth groups messages presence; do
-      psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" -c "SELECT 'CREATE DATABASE \"$db\"' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '$db')\\gexec"
-    done
+  type: ExternalName
+  externalName: REPLACE_WITH_RDS_ENDPOINT
+  ports:
+    - port: 5432
+      targetPort: 5432
