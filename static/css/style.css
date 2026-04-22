@@ -1113,7 +1113,7 @@ input, textarea {
     right: 0;
     top: 0;
     height: 100%;
-    z-index: 100;
+    z-index: 200; /* Aumentado para estar por encima del overlay */
     box-shadow: var(--shadow-lg);
     transform: translateX(100%);
     transition: transform 0.3s ease;
