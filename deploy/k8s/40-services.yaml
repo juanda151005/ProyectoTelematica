@@ -1,50 +1,22 @@
 # =============================================================================
 # GROUPSAPP — Microservices + Frontend: Deployments, Services, HPAs
 # =============================================================================
+# Arquitectura (según diagrama):
+#   Client (SPA) → API Gateway (ALB) → 4 microservicios
+#   - users-auth    : JWT, register, login, profiles        | gRPC :50051
+#   - groups         : rooms, DMs, roles, members            | gRPC :50052
+#   - messages-files : WebSocket, receipts, file upload (S3) |
+#   - presence       : online/offline, last seen, heartbeat  |
+#
+#   Comunicación inter-servicio: gRPC (azul punteado)
+#   Eventos async: RabbitMQ (message.created, presence.changed)
+#   Service registry: Consul (health-check)
+#   BD: PostgreSQL (una por servicio, en Amazon RDS Multi-AZ)
+#   Archivos: Amazon S3
+#
 # ANTES DE APLICAR:
-#   1. Sube las imágenes a un registry accesible (ECR o Docker Hub público).
-#   2. Reemplaza REGISTRY por tu URL base de ECR o Docker Hub.
-#      Ejemplo ECR: 123456789012.dkr.ecr.us-east-1.amazonaws.com
-#      Ejemplo Hub: docker.io/tuusuario
-#   3. Reemplaza REPLACE_WITH_EFS_FILE_SYSTEM_ID con el ID de tu EFS.
+#   1. Reemplaza REGISTRY con tu URL de ECR o Docker Hub.
 # =============================================================================
-
-# ========== EFS Storage para archivos compartidos ==========
----
-apiVersion: storage.k8s.io/v1
-kind: StorageClass
-metadata:
-  name: efs-sc
-provisioner: efs.csi.aws.com
----
-apiVersion: v1
-kind: PersistentVolume
-metadata:
-  name: groupsapp-uploads-pv
-spec:
-  capacity:
-    storage: 20Gi
-  volumeMode: Filesystem
-  accessModes:
-    - ReadWriteMany
-  storageClassName: efs-sc
-  persistentVolumeReclaimPolicy: Retain
-  csi:
-    driver: efs.csi.aws.com
-    volumeHandle: REPLACE_WITH_EFS_FILE_SYSTEM_ID
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: uploads-pvc
-  namespace: groupsapp
-spec:
-  accessModes:
-    - ReadWriteMany
-  storageClassName: efs-sc
-  resources:
-    requests:
-      storage: 20Gi
 
 # ========== Users / Auth Service ==========
 ---
@@ -63,7 +35,9 @@ spec:
         - name: app
           image: REGISTRY/groupsapp-users-auth:latest
           imagePullPolicy: Always
-          ports: [{containerPort: 8000, name: http}, {containerPort: 50051, name: grpc}]
+          ports:
+            - {containerPort: 8000, name: http}
+            - {containerPort: 50051, name: grpc}
           envFrom:
             - configMapRef:  {name: groupsapp-config}
             - secretRef:     {name: groupsapp-secret}
@@ -111,7 +85,9 @@ spec:
         - name: app
           image: REGISTRY/groupsapp-groups:latest
           imagePullPolicy: Always
-          ports: [{containerPort: 8000, name: http}, {containerPort: 50052, name: grpc}]
+          ports:
+            - {containerPort: 8000, name: http}
+            - {containerPort: 50052, name: grpc}
           envFrom:
             - configMapRef:  {name: groupsapp-config}
             - secretRef:     {name: groupsapp-secret}
@@ -142,7 +118,7 @@ spec:
   maxReplicas: 6
   metrics: [{type: Resource, resource: {name: cpu, target: {type: Utilization, averageUtilization: 70}}}]
 
-# ========== Messages / Files Service ==========
+# ========== Messages / Files Service (S3 storage) ==========
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -166,17 +142,11 @@ spec:
           env:
             - name: DATABASE_URL
               value: "postgresql+psycopg://groupsapp:$(POSTGRES_PASSWORD)@postgres:5432/messages"
-          volumeMounts:
-            - name: uploads
-              mountPath: /data/uploads
           readinessProbe: {httpGet: {path: /health, port: 8000}, initialDelaySeconds: 10, periodSeconds: 5}
           livenessProbe:  {httpGet: {path: /health, port: 8000}, initialDelaySeconds: 30, periodSeconds: 15}
           resources:
             requests: {cpu: 100m, memory: 128Mi}
             limits:   {cpu: 500m, memory: 512Mi}
-      volumes:
-        - name: uploads
-          persistentVolumeClaim: {claimName: uploads-pvc}
 ---
 apiVersion: v1
 kind: Service
@@ -240,7 +210,7 @@ spec:
   maxReplicas: 8
   metrics: [{type: Resource, resource: {name: cpu, target: {type: Utilization, averageUtilization: 70}}}]
 
-# ========== Frontend (Nginx static) ==========
+# ========== Frontend (Nginx static SPA) ==========
 ---
 apiVersion: apps/v1
 kind: Deployment
