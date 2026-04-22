@@ -1,18 +1,20 @@
 # =============================================================================
-# GROUPSAPP — PostgreSQL via Amazon RDS (EXTERNAL)
+# GROUPSAPP — PostgreSQL via Amazon RDS (Servicio externo)
 # =============================================================================
-# This file does NOT deploy PostgreSQL as a Pod.
-# Instead it creates a Kubernetes ExternalName Service that points to your
-# Amazon RDS endpoint, so all services can connect with the same hostname
-# "postgres" they already use in their DATABASE_URL env vars.
+# En lugar de correr Postgres como Pod dentro de Kubernetes, usamos
+# Amazon RDS Multi-AZ que ofrece:
+#   - Replicación automática
+#   - Backups automáticos
+#   - Failover automático (Alta Disponibilidad)
 #
-# SETUP STEPS:
-#   1. Create an Amazon RDS PostgreSQL 16 Multi-AZ instance in the same VPC
-#      as your EKS cluster.
-#   2. Create four databases on it: users_auth, groups, messages, presence
-#      (run the SQL from deploy/postgres/init-multiple-dbs.sh against RDS).
-#   3. Replace REPLACE_WITH_RDS_ENDPOINT below with the actual RDS endpoint,
-#      e.g.: groupsapp.abcdef123.us-east-1.rds.amazonaws.com
+# Este Service tipo ExternalName permite que los microservicios
+# sigan usando "postgres" como hostname en su DATABASE_URL.
+#
+# PASOS:
+#   1. Crea una instancia RDS PostgreSQL 16 desde la consola AWS.
+#   2. Crea las 4 bases de datos: users_auth, groups, messages, presence.
+#   3. Reemplaza REPLACE_WITH_RDS_ENDPOINT con el endpoint real.
+#      Ejemplo: groupsapp-db.cxyz12345.us-east-1.rds.amazonaws.com
 # =============================================================================
 ---
 apiVersion: v1

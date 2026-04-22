@@ -1,14 +1,9 @@
 # =============================================================================
-# GROUPSAPP — RabbitMQ HA Cluster (3 nodos) + Consul (3 nodos)
+# GROUPSAPP — RabbitMQ HA (StatefulSet 3 replicas) + Consul HA (StatefulSet 3 replicas)
 # =============================================================================
-# RabbitMQ: deployed as a StatefulSet with 3 replicas for High Availability.
-# Consul: deployed as a StatefulSet with 3 replicas for a proper quorum.
-#
-# NOTE: For a production-grade setup on AWS, consider using Amazon MQ
-# (managed RabbitMQ) instead of self-managing the cluster. To do so:
-#   1. Delete the RabbitMQ StatefulSet and Service below.
-#   2. Update the AMQP_URL secret in 10-secrets-config.yaml with the
-#      Amazon MQ broker URL.
+# Ambos servicios usan StatefulSets para alta disponibilidad (HA).
+# - RabbitMQ: 3 nodos (cluster de mensajería)
+# - Consul: 3 nodos (quorum Raft para coordinación)
 # =============================================================================
 
 # ---- RabbitMQ HA StatefulSet ----
@@ -20,7 +15,7 @@ metadata:
   namespace: groupsapp
 spec:
   serviceName: rabbitmq
-  replicas: 3   # 3-node HA cluster
+  replicas: 3
   selector:
     matchLabels: {app: rabbitmq}
   template:
@@ -35,13 +30,11 @@ spec:
             - {name: management, containerPort: 15672}
           env:
             - name: RABBITMQ_ERLANG_COOKIE
-              value: "groupsapp-erlang-cookie-change-me"
+              value: "groupsapp-erlang-cookie-secret"
             - name: RABBITMQ_DEFAULT_USER
               valueFrom: {secretKeyRef: {name: groupsapp-secret, key: RABBITMQ_DEFAULT_USER}}
             - name: RABBITMQ_DEFAULT_PASS
               valueFrom: {secretKeyRef: {name: groupsapp-secret, key: RABBITMQ_DEFAULT_PASS}}
-            - name: K8S_SERVICE_NAME
-              value: rabbitmq
           readinessProbe:
             exec:
               command: ["rabbitmq-diagnostics", "-q", "ping"]
@@ -64,7 +57,6 @@ spec:
         accessModes: ["ReadWriteOnce"]
         resources: {requests: {storage: 5Gi}}
 ---
-# Headless service for StatefulSet pod discovery (rabbitmq-0, rabbitmq-1, etc.)
 apiVersion: v1
 kind: Service
 metadata:
@@ -77,7 +69,7 @@ spec:
     - {name: amqp,       port: 5672,  targetPort: 5672}
     - {name: management, port: 15672, targetPort: 15672}
 
-# ---- Consul HA StatefulSet (3-node quorum) ----
+# ---- Consul HA StatefulSet (3-node Raft quorum) ----
 ---
 apiVersion: apps/v1
 kind: StatefulSet
@@ -86,7 +78,7 @@ metadata:
   namespace: groupsapp
 spec:
   serviceName: consul
-  replicas: 3   # Minimum for a proper Raft quorum
+  replicas: 3
   selector:
     matchLabels: {app: consul}
   template:
@@ -134,7 +126,6 @@ spec:
         accessModes: ["ReadWriteOnce"]
         resources: {requests: {storage: 2Gi}}
 ---
-# Headless service for Consul StatefulSet pod DNS
 apiVersion: v1
 kind: Service
 metadata:

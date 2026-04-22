@@ -1,17 +1,9 @@
 # =============================================================================
-# GROUPSAPP — AWS ALB Ingress + HTTPS
+# GROUPSAPP — Ingress con AWS ALB (LoadBalancer)
 # =============================================================================
-# PREREQUISITES:
-#   1. Install AWS Load Balancer Controller in your EKS cluster.
-#      https://docs.aws.amazon.com/eks/latest/userguide/aws-load-balancer-controller.html
-#
-#   2. Request (or import) a certificate in AWS Certificate Manager (ACM):
-#      aws acm request-certificate --domain-name your-domain.com \
-#        --validation-method DNS --region us-east-1
-#      Then replace REPLACE_WITH_ACM_CERT_ARN below.
-#
-#   3. (Optional) Set your real domain in the host: fields and
-#      create a Route53 A-record (alias) pointing to the ALB DNS.
+# Usa el AWS Load Balancer Controller para crear un ALB automáticamente.
+# En AWS Academy, asegúrate de que el ALB Controller esté instalado
+# (ver guía de despliegue).
 # =============================================================================
 ---
 apiVersion: networking.k8s.io/v1
@@ -20,30 +12,19 @@ metadata:
   name: groupsapp
   namespace: groupsapp
   annotations:
-    # ---- AWS ALB Controller ----
     kubernetes.io/ingress.class: alb
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
-
-    # ---- HTTPS: redirect HTTP → HTTPS ----
-    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80,"HTTPS":443}]'
-    alb.ingress.kubernetes.io/ssl-redirect: "443"
-    alb.ingress.kubernetes.io/certificate-arn: REPLACE_WITH_ACM_CERT_ARN
-
-    # ---- Health-check settings ----
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80}]'
+    # WebSocket: mantener conexiones abiertas más tiempo
+    alb.ingress.kubernetes.io/load-balancer-attributes: idle_timeout.timeout_seconds=3600
     alb.ingress.kubernetes.io/healthcheck-interval-seconds: "30"
     alb.ingress.kubernetes.io/healthcheck-timeout-seconds: "5"
-    alb.ingress.kubernetes.io/healthy-threshold-count: "2"
-    alb.ingress.kubernetes.io/unhealthy-threshold-count: "3"
-
-    # ---- WebSocket support (for /ws routes) ----
-    alb.ingress.kubernetes.io/load-balancer-attributes: idle_timeout.timeout_seconds=3600
-
 spec:
   rules:
     - http:
         paths:
-          # --- Backend API routes (high priority first) ---
+          # --- Backend API routes ---
           - path: /api/v1/auth
             pathType: Prefix
             backend: {service: {name: users-auth-service, port: {number: 8000}}}
@@ -68,12 +49,12 @@ spec:
             pathType: Prefix
             backend: {service: {name: presence-notifications-service, port: {number: 8000}}}
 
-          # --- WebSocket (must be before the catch-all /) ---
+          # --- WebSocket ---
           - path: /ws
             pathType: Prefix
             backend: {service: {name: presence-notifications-service, port: {number: 8000}}}
 
-          # --- Frontend (catch-all — must be last) ---
+          # --- Frontend (catch-all, debe ser el último) ---
           - path: /static
             pathType: Prefix
             backend: {service: {name: frontend, port: {number: 80}}}

@@ -1,36 +1,64 @@
 # =============================================================================
-# GROUPSAPP — Microservice Deployments, Services & HPAs
+# GROUPSAPP — Microservices + Frontend: Deployments, Services, HPAs
 # =============================================================================
-# BEFORE APPLYING:
-#   1. Build and push all images to Amazon ECR:
-#      docker build -t <ACCOUNT_ID>.dkr.ecr.<REGION>.amazonaws.com/groupsapp-users-auth:latest \
-#           -f services/users-auth-service/Dockerfile .
-#      (repeat for groups, messages-files, presence-notifications)
-#
-#   2. Replace every "REGISTRY" placeholder with your ECR base URL:
-#      <ACCOUNT_ID>.dkr.ecr.<REGION>.amazonaws.com
-#
-#   3. Authenticate Docker to ECR:
-#      aws ecr get-login-password --region <REGION> | \
-#        docker login --username AWS --password-stdin <ACCOUNT_ID>.dkr.ecr.<REGION>.amazonaws.com
+# ANTES DE APLICAR:
+#   1. Sube las imágenes a un registry accesible (ECR o Docker Hub público).
+#   2. Reemplaza REGISTRY por tu URL base de ECR o Docker Hub.
+#      Ejemplo ECR: 123456789012.dkr.ecr.us-east-1.amazonaws.com
+#      Ejemplo Hub: docker.io/tuusuario
+#   3. Reemplaza REPLACE_WITH_EFS_FILE_SYSTEM_ID con el ID de tu EFS.
 # =============================================================================
 
-# ---- Users / Auth Service ----
+# ========== EFS Storage para archivos compartidos ==========
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: efs-sc
+provisioner: efs.csi.aws.com
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: groupsapp-uploads-pv
+spec:
+  capacity:
+    storage: 20Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteMany
+  storageClassName: efs-sc
+  persistentVolumeReclaimPolicy: Retain
+  csi:
+    driver: efs.csi.aws.com
+    volumeHandle: REPLACE_WITH_EFS_FILE_SYSTEM_ID
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: uploads-pvc
+  namespace: groupsapp
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: efs-sc
+  resources:
+    requests:
+      storage: 20Gi
+
+# ========== Users / Auth Service ==========
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: users-auth-service
   namespace: groupsapp
-  labels: {app: users-auth-service}
 spec:
   replicas: 2
   selector: {matchLabels: {app: users-auth-service}}
   template:
-    metadata:
-      labels: {app: users-auth-service}
+    metadata: {labels: {app: users-auth-service}}
     spec:
-      serviceAccountName: groupsapp-sa
       containers:
         - name: app
           image: REGISTRY/groupsapp-users-auth:latest
@@ -50,9 +78,7 @@ spec:
 ---
 apiVersion: v1
 kind: Service
-metadata:
-  name: users-auth-service
-  namespace: groupsapp
+metadata: {name: users-auth-service, namespace: groupsapp}
 spec:
   selector: {app: users-auth-service}
   ports:
@@ -61,33 +87,26 @@ spec:
 ---
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
-metadata:
-  name: users-auth-service
-  namespace: groupsapp
+metadata: {name: users-auth-service, namespace: groupsapp}
 spec:
   scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: users-auth-service}
   minReplicas: 2
   maxReplicas: 6
-  metrics:
-    - type: Resource
-      resource: {name: cpu, target: {type: Utilization, averageUtilization: 70}}
+  metrics: [{type: Resource, resource: {name: cpu, target: {type: Utilization, averageUtilization: 70}}}]
 
-# ---- Groups Service ----
+# ========== Groups Service ==========
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: groups-service
   namespace: groupsapp
-  labels: {app: groups-service}
 spec:
   replicas: 2
   selector: {matchLabels: {app: groups-service}}
   template:
-    metadata:
-      labels: {app: groups-service}
+    metadata: {labels: {app: groups-service}}
     spec:
-      serviceAccountName: groupsapp-sa
       containers:
         - name: app
           image: REGISTRY/groupsapp-groups:latest
@@ -107,9 +126,7 @@ spec:
 ---
 apiVersion: v1
 kind: Service
-metadata:
-  name: groups-service
-  namespace: groupsapp
+metadata: {name: groups-service, namespace: groupsapp}
 spec:
   selector: {app: groups-service}
   ports:
@@ -118,33 +135,26 @@ spec:
 ---
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
-metadata:
-  name: groups-service
-  namespace: groupsapp
+metadata: {name: groups-service, namespace: groupsapp}
 spec:
   scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: groups-service}
   minReplicas: 2
   maxReplicas: 6
-  metrics:
-    - type: Resource
-      resource: {name: cpu, target: {type: Utilization, averageUtilization: 70}}
+  metrics: [{type: Resource, resource: {name: cpu, target: {type: Utilization, averageUtilization: 70}}}]
 
-# ---- Messages / Files Service ----
+# ========== Messages / Files Service ==========
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: messages-files-service
   namespace: groupsapp
-  labels: {app: messages-files-service}
 spec:
   replicas: 2
   selector: {matchLabels: {app: messages-files-service}}
   template:
-    metadata:
-      labels: {app: messages-files-service}
+    metadata: {labels: {app: messages-files-service}}
     spec:
-      serviceAccountName: groupsapp-sa   # Needs S3 write permission via IRSA
       containers:
         - name: app
           image: REGISTRY/groupsapp-messages:latest
@@ -156,54 +166,47 @@ spec:
           env:
             - name: DATABASE_URL
               value: "postgresql+psycopg://groupsapp:$(POSTGRES_PASSWORD)@postgres:5432/messages"
-            - name: S3_BUCKET
-              valueFrom: {secretKeyRef: {name: groupsapp-secret, key: S3_BUCKET}}
-            - name: S3_REGION
-              valueFrom: {secretKeyRef: {name: groupsapp-secret, key: S3_REGION}}
+          volumeMounts:
+            - name: uploads
+              mountPath: /data/uploads
           readinessProbe: {httpGet: {path: /health, port: 8000}, initialDelaySeconds: 10, periodSeconds: 5}
           livenessProbe:  {httpGet: {path: /health, port: 8000}, initialDelaySeconds: 30, periodSeconds: 15}
           resources:
             requests: {cpu: 100m, memory: 128Mi}
             limits:   {cpu: 500m, memory: 512Mi}
+      volumes:
+        - name: uploads
+          persistentVolumeClaim: {claimName: uploads-pvc}
 ---
 apiVersion: v1
 kind: Service
-metadata:
-  name: messages-files-service
-  namespace: groupsapp
+metadata: {name: messages-files-service, namespace: groupsapp}
 spec:
   selector: {app: messages-files-service}
   ports: [{name: http, port: 8000, targetPort: 8000}]
 ---
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
-metadata:
-  name: messages-files-service
-  namespace: groupsapp
+metadata: {name: messages-files-service, namespace: groupsapp}
 spec:
   scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: messages-files-service}
   minReplicas: 2
   maxReplicas: 8
-  metrics:
-    - type: Resource
-      resource: {name: cpu, target: {type: Utilization, averageUtilization: 70}}
+  metrics: [{type: Resource, resource: {name: cpu, target: {type: Utilization, averageUtilization: 70}}}]
 
-# ---- Presence / Notifications Service ----
+# ========== Presence / Notifications Service ==========
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: presence-notifications-service
   namespace: groupsapp
-  labels: {app: presence-notifications-service}
 spec:
   replicas: 2
   selector: {matchLabels: {app: presence-notifications-service}}
   template:
-    metadata:
-      labels: {app: presence-notifications-service}
+    metadata: {labels: {app: presence-notifications-service}}
     spec:
-      serviceAccountName: groupsapp-sa
       containers:
         - name: app
           image: REGISTRY/groupsapp-presence:latest
@@ -223,69 +226,55 @@ spec:
 ---
 apiVersion: v1
 kind: Service
-metadata:
-  name: presence-notifications-service
-  namespace: groupsapp
+metadata: {name: presence-notifications-service, namespace: groupsapp}
 spec:
   selector: {app: presence-notifications-service}
   ports: [{name: http, port: 8000, targetPort: 8000}]
 ---
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
-metadata:
-  name: presence-notifications-service
-  namespace: groupsapp
+metadata: {name: presence-notifications-service, namespace: groupsapp}
 spec:
   scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: presence-notifications-service}
   minReplicas: 2
   maxReplicas: 8
-  metrics:
-    - type: Resource
-      resource: {name: cpu, target: {type: Utilization, averageUtilization: 70}}
+  metrics: [{type: Resource, resource: {name: cpu, target: {type: Utilization, averageUtilization: 70}}}]
 
-# ---- Frontend (Nginx serving static HTML/CSS/JS) ----
+# ========== Frontend (Nginx static) ==========
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: frontend
   namespace: groupsapp
-  labels: {app: frontend}
 spec:
   replicas: 2
   selector: {matchLabels: {app: frontend}}
   template:
-    metadata:
-      labels: {app: frontend}
+    metadata: {labels: {app: frontend}}
     spec:
       containers:
         - name: nginx
           image: REGISTRY/groupsapp-frontend:latest
           imagePullPolicy: Always
           ports: [{containerPort: 80, name: http}]
-          readinessProbe: {httpGet: {path: /, port: 80}, initialDelaySeconds: 5, periodSeconds: 5}
+          readinessProbe: {httpGet: {path: /healthz, port: 80}, initialDelaySeconds: 5, periodSeconds: 5}
           resources:
             requests: {cpu: 50m,  memory: 64Mi}
             limits:   {cpu: 200m, memory: 128Mi}
 ---
 apiVersion: v1
 kind: Service
-metadata:
-  name: frontend
-  namespace: groupsapp
+metadata: {name: frontend, namespace: groupsapp}
 spec:
   selector: {app: frontend}
   ports: [{name: http, port: 80, targetPort: 80}]
 ---
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
-metadata:
-  name: frontend
-  namespace: groupsapp
+metadata: {name: frontend, namespace: groupsapp}
 spec:
   scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: frontend}
   minReplicas: 2
   maxReplicas: 4
-  metrics:
-    - type: Resource
-      resource: {name: cpu, target: {type: Utilization, averageUtilization: 80}}
+  metrics: [{type: Resource, resource: {name: cpu, target: {type: Utilization, averageUtilization: 80}}}]
