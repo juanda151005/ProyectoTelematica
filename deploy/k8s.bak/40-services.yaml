@@ -33,7 +33,7 @@ spec:
     spec:
       containers:
         - name: app
-          image: 764264263069.dkr.ecr.us-east-1.amazonaws.com/groupsapp-users-auth:latest
+          image: REGISTRY/groupsapp-users-auth:latest
           imagePullPolicy: Always
           ports:
             - {containerPort: 8000, name: http}
@@ -83,7 +83,7 @@ spec:
     spec:
       containers:
         - name: app
-          image: 764264263069.dkr.ecr.us-east-1.amazonaws.com/groupsapp-groups:latest
+          image: REGISTRY/groupsapp-groups:latest
           imagePullPolicy: Always
           ports:
             - {containerPort: 8000, name: http}
@@ -133,7 +133,7 @@ spec:
     spec:
       containers:
         - name: app
-          image: 764264263069.dkr.ecr.us-east-1.amazonaws.com/groupsapp-messages:latest
+          image: REGISTRY/groupsapp-messages:latest
           imagePullPolicy: Always
           ports: [{containerPort: 8000, name: http}]
           envFrom:
@@ -179,7 +179,7 @@ spec:
     spec:
       containers:
         - name: app
-          image: 764264263069.dkr.ecr.us-east-1.amazonaws.com/groupsapp-presence:latest
+          image: REGISTRY/groupsapp-presence:latest
           imagePullPolicy: Always
           ports: [{containerPort: 8000, name: http}]
           envFrom:
@@ -206,10 +206,7 @@ kind: HorizontalPodAutoscaler
 metadata: {name: presence-notifications-service, namespace: groupsapp}
 spec:
   scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: presence-notifications-service}
-  # minReplicas=1: safe to run single replica until the exclusive-queue image is deployed.
-  # After deploying the exclusive-queue fix, raise to 2+ for HA — each pod gets its own
-  # RabbitMQ queue and fans out only to its own WebSocket connections.
-  minReplicas: 1
+  minReplicas: 2
   maxReplicas: 8
   metrics: [{type: Resource, resource: {name: cpu, target: {type: Utilization, averageUtilization: 70}}}]
 
@@ -228,7 +225,7 @@ spec:
     spec:
       containers:
         - name: nginx
-          image: 764264263069.dkr.ecr.us-east-1.amazonaws.com/groupsapp-frontend:latest
+          image: REGISTRY/groupsapp-frontend:latest
           imagePullPolicy: Always
           ports: [{containerPort: 80, name: http}]
           readinessProbe: {httpGet: {path: /healthz, port: 80}, initialDelaySeconds: 5, periodSeconds: 5}

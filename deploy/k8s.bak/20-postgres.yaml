@@ -13,7 +13,7 @@
 # PASOS:
 #   1. Crea una instancia RDS PostgreSQL 16 desde la consola AWS.
 #   2. Crea las 4 bases de datos: users_auth, groups, messages, presence.
-#   3. Reemplaza groupsapp-db.c8xmzk4na5eq.us-east-1.rds.amazonaws.com con el endpoint real.
+#   3. Reemplaza REPLACE_WITH_RDS_ENDPOINT con el endpoint real.
 #      Ejemplo: groupsapp-db.cxyz12345.us-east-1.rds.amazonaws.com
 # =============================================================================
 ---
@@ -24,7 +24,7 @@ metadata:
   namespace: groupsapp
 spec:
   type: ExternalName
-  externalName: groupsapp-db.c8xmzk4na5eq.us-east-1.rds.amazonaws.com
+  externalName: REPLACE_WITH_RDS_ENDPOINT
   ports:
     - port: 5432
       targetPort: 5432

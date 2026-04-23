@@ -1,9 +1,16 @@
 # =============================================================================
-# GROUPSAPP — Ingress con AWS ALB (LoadBalancer)
+# GROUPSAPP — Nginx Ingress (routes all traffic through ingress-nginx NodePort)
 # =============================================================================
-# Usa el AWS Load Balancer Controller para crear un ALB automáticamente.
-# En AWS Academy, asegúrate de que el ALB Controller esté instalado
-# (ver guía de despliegue).
+# Traffic path: Client → AWS ALB (idle_timeout=3600) → ingress-nginx NodePort
+#   30080 → this Ingress → backend services.
+#
+# WebSocket notes:
+#   - proxy-http-version: "1.1" required so nginx uses HTTP/1.1 upstream
+#     (default HTTP/1.0 cannot carry the Upgrade handshake).
+#   - configuration-snippet injects the Upgrade/Connection headers per location.
+#   - $connection_upgrade (defined in nginx global config) is "upgrade" when
+#     the client sends Upgrade, and "close" otherwise — correct for both WS
+#     and plain HTTP routes sharing this Ingress.
 # =============================================================================
 ---
 apiVersion: networking.k8s.io/v1
@@ -12,53 +19,67 @@ metadata:
   name: groupsapp
   namespace: groupsapp
   annotations:
-    kubernetes.io/ingress.class: alb
-    alb.ingress.kubernetes.io/scheme: internet-facing
-    alb.ingress.kubernetes.io/target-type: ip
-    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80}]'
-    # WebSocket: mantener conexiones abiertas más tiempo
-    alb.ingress.kubernetes.io/load-balancer-attributes: idle_timeout.timeout_seconds=3600
-    alb.ingress.kubernetes.io/healthcheck-interval-seconds: "30"
-    alb.ingress.kubernetes.io/healthcheck-timeout-seconds: "5"
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    # HTTP/1.1 is required for WebSocket upgrade; harmless for plain HTTP.
+    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+    # Forward WebSocket handshake headers to all upstreams. $connection_upgrade
+    # resolves to "upgrade" for WS connections and "close" for plain HTTP.
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection $connection_upgrade;
 spec:
+  ingressClassName: nginx
   rules:
     - http:
         paths:
-          # --- Backend API routes ---
+          # --- Auth ---
           - path: /api/v1/auth
             pathType: Prefix
             backend: {service: {name: users-auth-service, port: {number: 8000}}}
 
+          # --- Presence (before /api/v1/users to catch /{id}/presence) ---
+          - path: /api/v1/users/([^/]+)/presence
+            pathType: ImplementationSpecific
+            backend: {service: {name: presence-notifications-service, port: {number: 8000}}}
+
+          # --- Users ---
           - path: /api/v1/users
             pathType: Prefix
             backend: {service: {name: users-auth-service, port: {number: 8000}}}
 
+          # --- Messages (before /api/v1/groups to catch /{id}/messages) ---
+          - path: /api/v1/groups/([^/]+)/messages
+            pathType: ImplementationSpecific
+            backend: {service: {name: messages-files-service, port: {number: 8000}}}
+
+          # --- Groups ---
           - path: /api/v1/groups
             pathType: Prefix
             backend: {service: {name: groups-service, port: {number: 8000}}}
 
+          # --- Messages (unread counts, file upload) ---
           - path: /api/v1/messages
             pathType: Prefix
             backend: {service: {name: messages-files-service, port: {number: 8000}}}
 
+          # --- File uploads ---
           - path: /uploads
             pathType: Prefix
             backend: {service: {name: messages-files-service, port: {number: 8000}}}
 
+          # --- Presence REST ---
           - path: /api/v1/presence
             pathType: Prefix
             backend: {service: {name: presence-notifications-service, port: {number: 8000}}}
 
-          # --- WebSocket ---
+          # --- WebSocket (group chat + notifications) ---
           - path: /ws
             pathType: Prefix
             backend: {service: {name: presence-notifications-service, port: {number: 8000}}}
 
-          # --- Frontend (catch-all, debe ser el último) ---
-          - path: /static
-            pathType: Prefix
-            backend: {service: {name: frontend, port: {number: 80}}}
-
+          # --- Frontend SPA (catch-all, must be last) ---
           - path: /
             pathType: Prefix
             backend: {service: {name: frontend, port: {number: 80}}}

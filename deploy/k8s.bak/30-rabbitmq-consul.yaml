@@ -1,0 +1,140 @@
+# =============================================================================
+# GROUPSAPP — RabbitMQ HA (StatefulSet 3 replicas) + Consul HA (StatefulSet 3 replicas)
+# =============================================================================
+# Ambos servicios usan StatefulSets para alta disponibilidad (HA).
+# - RabbitMQ: 3 nodos (cluster de mensajería)
+# - Consul: 3 nodos (quorum Raft para coordinación)
+# =============================================================================
+
+# ---- RabbitMQ HA StatefulSet ----
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: rabbitmq
+  namespace: groupsapp
+spec:
+  serviceName: rabbitmq
+  replicas: 3
+  selector:
+    matchLabels: {app: rabbitmq}
+  template:
+    metadata:
+      labels: {app: rabbitmq}
+    spec:
+      containers:
+        - name: rabbitmq
+          image: rabbitmq:3.13-management-alpine
+          ports:
+            - {name: amqp, containerPort: 5672}
+            - {name: management, containerPort: 15672}
+          env:
+            - name: RABBITMQ_ERLANG_COOKIE
+              value: "groupsapp-erlang-cookie-secret"
+            - name: RABBITMQ_DEFAULT_USER
+              valueFrom: {secretKeyRef: {name: groupsapp-secret, key: RABBITMQ_DEFAULT_USER}}
+            - name: RABBITMQ_DEFAULT_PASS
+              valueFrom: {secretKeyRef: {name: groupsapp-secret, key: RABBITMQ_DEFAULT_PASS}}
+          readinessProbe:
+            exec:
+              command: ["rabbitmq-diagnostics", "-q", "ping"]
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command: ["rabbitmq-diagnostics", "-q", "ping"]
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          resources:
+            requests: {cpu: 200m, memory: 256Mi}
+            limits:   {cpu: 1000m, memory: 1Gi}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/rabbitmq
+  volumeClaimTemplates:
+    - metadata: {name: data}
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources: {requests: {storage: 5Gi}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rabbitmq
+  namespace: groupsapp
+spec:
+  clusterIP: None
+  selector: {app: rabbitmq}
+  ports:
+    - {name: amqp,       port: 5672,  targetPort: 5672}
+    - {name: management, port: 15672, targetPort: 15672}
+
+# ---- Consul HA StatefulSet (3-node Raft quorum) ----
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: consul
+  namespace: groupsapp
+spec:
+  serviceName: consul
+  replicas: 3
+  selector:
+    matchLabels: {app: consul}
+  template:
+    metadata:
+      labels: {app: consul}
+    spec:
+      containers:
+        - name: consul
+          image: hashicorp/consul:1.19
+          ports:
+            - {name: http,    containerPort: 8500}
+            - {name: server,  containerPort: 8300}
+            - {name: serflan, containerPort: 8301}
+          env:
+            - name: POD_IP
+              valueFrom: {fieldRef: {fieldPath: status.podIP}}
+          command:
+            - /bin/sh
+            - -ec
+            - |
+              exec consul agent \
+                -server \
+                -ui \
+                -bootstrap-expect=3 \
+                -bind=0.0.0.0 \
+                -advertise=$(POD_IP) \
+                -client=0.0.0.0 \
+                -retry-join=consul-0.consul.groupsapp.svc.cluster.local \
+                -retry-join=consul-1.consul.groupsapp.svc.cluster.local \
+                -retry-join=consul-2.consul.groupsapp.svc.cluster.local \
+                -data-dir=/consul/data
+          readinessProbe:
+            httpGet: {path: /v1/status/leader, port: 8500}
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits:   {cpu: 500m, memory: 512Mi}
+          volumeMounts:
+            - name: data
+              mountPath: /consul/data
+  volumeClaimTemplates:
+    - metadata: {name: data}
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources: {requests: {storage: 2Gi}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: consul
+  namespace: groupsapp
+spec:
+  clusterIP: None
+  selector: {app: consul}
+  ports:
+    - {name: http,    port: 8500, targetPort: 8500}
+    - {name: server,  port: 8300, targetPort: 8300}
+    - {name: serflan, port: 8301, targetPort: 8301}

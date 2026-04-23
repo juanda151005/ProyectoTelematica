@@ -31,6 +31,7 @@ async def lifespan(_: FastAPI):
         "presence.events",
         ["message.created", "message.read", "group.member.added", "group.member.removed"],
         handle_event,
+        exclusive=True,
     )
     sid = consul.register(settings.service_name, settings.http_port)
     log.info("%s started", settings.service_name)

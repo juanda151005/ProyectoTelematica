@@ -31,3 +31,13 @@ class GroupsGRPCClient:
         except grpc.RpcError as e:
             log.warning("IsMember failed: %s", e)
             return False
+
+    def group_members(self, group_id: uuid.UUID) -> list[uuid.UUID]:
+        try:
+            r = self._stub().GetGroupMembers(
+                groups_pb2.GetGroupMembersRequest(group_id=str(group_id)), timeout=3.0
+            )
+            return [uuid.UUID(uid) for uid in r.user_ids]
+        except grpc.RpcError as e:
+            log.warning("GetGroupMembers failed: %s", e)
+            return []

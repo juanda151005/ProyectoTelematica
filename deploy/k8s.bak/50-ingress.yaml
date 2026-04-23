@@ -1,0 +1,64 @@
+# =============================================================================
+# GROUPSAPP — Ingress con AWS ALB (LoadBalancer)
+# =============================================================================
+# Usa el AWS Load Balancer Controller para crear un ALB automáticamente.
+# En AWS Academy, asegúrate de que el ALB Controller esté instalado
+# (ver guía de despliegue).
+# =============================================================================
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: groupsapp
+  namespace: groupsapp
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80}]'
+    # WebSocket: mantener conexiones abiertas más tiempo
+    alb.ingress.kubernetes.io/load-balancer-attributes: idle_timeout.timeout_seconds=3600
+    alb.ingress.kubernetes.io/healthcheck-interval-seconds: "30"
+    alb.ingress.kubernetes.io/healthcheck-timeout-seconds: "5"
+spec:
+  rules:
+    - http:
+        paths:
+          # --- Backend API routes ---
+          - path: /api/v1/auth
+            pathType: Prefix
+            backend: {service: {name: users-auth-service, port: {number: 8000}}}
+
+          - path: /api/v1/users
+            pathType: Prefix
+            backend: {service: {name: users-auth-service, port: {number: 8000}}}
+
+          - path: /api/v1/groups
+            pathType: Prefix
+            backend: {service: {name: groups-service, port: {number: 8000}}}
+
+          - path: /api/v1/messages
+            pathType: Prefix
+            backend: {service: {name: messages-files-service, port: {number: 8000}}}
+
+          - path: /uploads
+            pathType: Prefix
+            backend: {service: {name: messages-files-service, port: {number: 8000}}}
+
+          - path: /api/v1/presence
+            pathType: Prefix
+            backend: {service: {name: presence-notifications-service, port: {number: 8000}}}
+
+          # --- WebSocket ---
+          - path: /ws
+            pathType: Prefix
+            backend: {service: {name: presence-notifications-service, port: {number: 8000}}}
+
+          # --- Frontend (catch-all, debe ser el último) ---
+          - path: /static
+            pathType: Prefix
+            backend: {service: {name: frontend, port: {number: 80}}}
+
+          - path: /
+            pathType: Prefix
+            backend: {service: {name: frontend, port: {number: 80}}}

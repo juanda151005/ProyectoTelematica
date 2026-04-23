@@ -54,9 +54,25 @@ class EventBus:
         queue_name: str,
         routing_keys: list[str],
         handler: Callable[[str, dict], Awaitable[None]],
+        *,
+        exclusive: bool = False,
     ) -> None:
+        """Subscribe to routing keys on the topic exchange.
+
+        exclusive=True declares an auto-delete, server-named queue so that
+        every consumer instance (pod) receives ALL matching events — the
+        correct pattern for WebSocket fan-out across multiple replicas.
+        With exclusive=False (default) a shared durable queue is used and
+        messages are distributed round-robin among consumers.
+        """
         assert self._channel is not None and self._exchange is not None
-        queue = await self._channel.declare_queue(queue_name, durable=True)
+        # exclusive queues: server-generated name, non-durable, auto-deleted on disconnect
+        queue = await self._channel.declare_queue(
+            queue_name if not exclusive else "",
+            durable=not exclusive,
+            exclusive=exclusive,
+            auto_delete=exclusive,
+        )
         for rk in routing_keys:
             await queue.bind(self._exchange, routing_key=rk)
 
@@ -69,7 +85,7 @@ class EventBus:
                     log.exception("error handling event %s", message.routing_key)
 
         await queue.consume(_on_message)
-        log.info("subscribed queue=%s keys=%s", queue_name, routing_keys)
+        log.info("subscribed queue=%s exclusive=%s keys=%s", queue.name, exclusive, routing_keys)
 
 
 async def wait_for_broker(amqp_url: str, max_attempts: int = 30) -> None:
